@@ -19,6 +19,17 @@ function bookingSlot(day, packageName, calendarDays, today) {
   return {selectable:true,reason:'available',departure};
 }
 
+function bookingDateChoice(selection, value, packageName, calendarDays, today) {
+  const start=calendarDays.get(selection.arrival);
+  if(selection.arrival&&!selection.departure&&start) {
+    const slot=bookingSlot(start,packageName,calendarDays,today);
+    if(slot.selectable&&value===slot.departure)return {arrival:selection.arrival,departure:value};
+  }
+  const day=calendarDays.get(value);
+  if(day&&bookingSlot(day,packageName,calendarDays,today).selectable)return {arrival:value,departure:''};
+  return {arrival:selection.arrival,departure:selection.departure};
+}
+
 (() => {
   const form=document.getElementById('booking-form');
   if (!form) return;
@@ -45,17 +56,18 @@ function bookingSlot(day, packageName, calendarDays, today) {
     const first=new Date(today+'T12:00:00');
     const minimum=bookingDateAfter(today,(weekday-first.getDay()+7)%7);
     arrival.min=minimum;arrival.step='7';arrival.setCustomValidity('');
-    departure.value='';
     if(arrival.value) {
       const start=new Date(arrival.value+'T12:00:00');
       if(start.getDay()!==weekday)arrival.setCustomValidity(packageField.value==='midweek'?'Choisissez un lundi pour le mid-week.':'Choisissez un vendredi pour le week-end.');
       else if(arrival.value<today)arrival.setCustomValidity('Choisissez une date d’arrivée à venir.');
-      else {departure.value=bookingDateAfter(arrival.value,packageField.value==='midweek'?4:3);departure.min=departure.value}
+      else departure.min=bookingDateAfter(arrival.value,packageField.value==='midweek'?4:3);
     }
     document.getElementById('package-schedule').textContent=packageField.value==='midweek'?'Arrivée le lundi à 17 h, départ le vendredi à 9 h.':'Arrivée le vendredi à 17 h, départ le lundi à 9 h.';
     document.getElementById('selected-stay').textContent=departure.value
       ?packageLabel()+' du '+prettyDate(arrival.value)+' à 17 h au '+prettyDate(departure.value)+' à 9 h.'
-      :'Choisissez '+(packageField.value==='midweek'?'un lundi':'un vendredi')+' dans le calendrier pour sélectionner votre séjour.';
+      :arrival.value
+        ?'Arrivée le '+prettyDate(arrival.value)+' à 17 h. Cliquez maintenant sur '+(packageField.value==='midweek'?'le vendredi':'le lundi')+' de départ dans le calendrier.'
+        :'Cliquez sur votre arrivée, puis sur votre départ dans le calendrier.';
   }
   async function api(path,data) {
     const response=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
@@ -72,41 +84,67 @@ function bookingSlot(day, packageName, calendarDays, today) {
     document.getElementById('previous-month').disabled=year===now.getFullYear()&&selectedMonth===now.getMonth();
     document.getElementById('next-month').disabled=year===2100&&selectedMonth===11;
     try {
-      const calendars=await Promise.all([api('/api/availability?year='+year),...(selectedMonth===11&&year<2100?[api('/api/availability?year='+(year+1))]:[])]);
+      const years=new Set([year]);
+      if(selectedMonth===11&&year<2100)years.add(year+1);
+      if(arrival.value)years.add(Number(arrival.value.slice(0,4)));
+      const calendars=await Promise.all([...years].map(value=>api('/api/availability?year='+value)));
       if(current!==calendarRevision)return;
       const days=new Map(calendars.flatMap(data=>data.days).map(day=>[day.date,day]));
+      const selection={arrival:arrival.value,departure:departure.value};
+      const selectedStart=days.get(selection.arrival);
+      const pendingSlot=selection.arrival&&!selection.departure&&selectedStart?bookingSlot(selectedStart,packageField.value,days,today):null;
       ['Lun.','Mar.','Mer.','Jeu.','Ven.','Sam.','Dim.'].forEach(label=>{const cell=document.createElement('span');cell.className='calendar-weekday';cell.textContent=label;calendar.append(cell)});
       const offset=(new Date(year,selectedMonth,1).getDay()+6)%7;
       for(let count=0;count<offset;count++){const blank=document.createElement('span');blank.setAttribute('aria-hidden','true');calendar.append(blank)}
       let available=0;
-      calendars[0].days.filter(day=>Number(day.date.slice(5,7))===selectedMonth+1).forEach(day=>{
+      calendars.find(data=>data.year===year).days.filter(day=>Number(day.date.slice(5,7))===selectedMonth+1).forEach(day=>{
         const slot=bookingSlot(day,packageField.value,days,today);
-        const candidate=slot.reason!=='other';
+        const endChoice=Boolean(pendingSlot?.selectable&&day.date===pendingSlot.departure);
+        const candidate=slot.reason!=='other'||endChoice;
         const cell=document.createElement(candidate?'button':'span');
         cell.className='calendar-day';
         cell.dataset.state=day.state;
         cell.dataset.date=day.date;
         cell.dataset.arrival=String(candidate);
-        cell.dataset.selected=String(Boolean(arrival.value&&departure.value&&day.date>=arrival.value&&day.date<departure.value));
+        cell.dataset.selected=String(Boolean(day.date===arrival.value||arrival.value&&departure.value&&day.date>=arrival.value&&day.date<=departure.value));
+        cell.dataset.endChoice=String(endChoice);
         cell.dataset.checkout=String(day.date===departure.value);
         const number=document.createElement('span');number.className='day-number';number.textContent=Number(day.date.slice(8));cell.append(number);
         if(candidate) {
-          cell.type='button';cell.disabled=!slot.selectable;
-          cell.setAttribute('aria-pressed',String(day.date===arrival.value));
+          cell.type='button';cell.disabled=!slot.selectable&&!endChoice;
+          cell.setAttribute('aria-pressed',String(day.date===arrival.value||day.date===departure.value));
           const label=document.createElement('small');
-          label.textContent={available:'Arrivée',occupied:'Complet',unpriced:'À définir',past:'Passé',unknown:'À vérifier'}[slot.reason];cell.append(label);
+          label.textContent=endChoice?'Départ':day.date===arrival.value?'Arrivée':{available:'Arrivée',occupied:'Complet',unpriced:'À définir',past:'Passé',unknown:'À vérifier'}[slot.reason];cell.append(label);
           if(slot.selectable)available++;
-          cell.setAttribute('aria-label',slot.selectable
-            ?packageLabel()+' du '+prettyDate(day.date)+' à 17 h au '+prettyDate(slot.departure)+' à 9 h. Forfait logement '+money(day.cents)+', ménage en supplément. Sélectionner ce séjour.'
+          cell.setAttribute('aria-label',endChoice
+            ?'Choisir le départ le '+prettyDate(day.date)+' à 9 h et valider les dates de votre '+packageLabel()+'.'
+            :slot.selectable
+            ?'Choisir l’arrivée le '+prettyDate(day.date)+' à 17 h. '+packageLabel()+' jusqu’au '+prettyDate(slot.departure)+' à 9 h. Forfait logement '+money(day.cents)+', ménage en supplément.'
             :prettyDate(day.date)+' : '+label.textContent);
-          cell.addEventListener('click',()=>{invalidate();arrival.value=day.date;updatePackage();renderCalendar(day.date)});
-        } else cell.setAttribute('aria-label',prettyDate(day.date)+(day.date===departure.value?' : départ à 9 h':''));
+          cell.addEventListener('click',()=>{
+            invalidate();
+            const next=bookingDateChoice({arrival:arrival.value,departure:departure.value},day.date,packageField.value,days,today);
+            arrival.value=next.arrival;departure.value=next.departure;updatePackage();
+            const focus=next.departure||bookingDateAfter(next.arrival,packageField.value==='midweek'?4:3);
+            if(!next.departure){month=new Date(focus+'T12:00:00');month.setDate(1)}
+            renderCalendar(focus);
+          });
+        } else {
+          cell.setAttribute('aria-label',prettyDate(day.date)+(day.date===departure.value?' : départ à 9 h':''));
+          if(day.date===departure.value){cell.tabIndex=-1;const label=document.createElement('small');label.textContent='Départ';cell.append(label)}
+        }
         cell.title=cell.getAttribute('aria-label');
         calendar.append(cell);
       });
-      calendarMessage.textContent=available
-        ?'Cliquez sur '+(packageField.value==='midweek'?'un lundi':'un vendredi')+' marqué « Arrivée ». Le séjour complet est sélectionné automatiquement.'
-        :'Aucun départ de forfait disponible et tarifé ce mois-ci. Essayez le mois suivant ou l’autre forfait.';
+      calendarMessage.textContent=selection.arrival&&!selection.departure
+        ?pendingSlot?.selectable
+          ?'Arrivée choisie. Cliquez sur le '+prettyDate(pendingSlot.departure)+' marqué « Départ » pour valider votre séjour.'
+          :'Cette arrivée n’est plus disponible. Choisissez une nouvelle arrivée ou effacez les dates.'
+        :selection.departure
+          ?'Vos deux dates sont choisies. Elles sont affichées dans le récapitulatif du séjour.'
+          :available
+            ?'Premier clic : choisissez '+(packageField.value==='midweek'?'un lundi':'un vendredi')+' d’arrivée. Second clic : validez le départ proposé.'
+            :'Aucune arrivée disponible et tarifée ce mois-ci. Essayez le mois suivant ou l’autre forfait.';
       if(focusDate)calendar.querySelector('[data-date="'+focusDate+'"]')?.focus({preventScroll:true});
     } catch(error) {
       if(current===calendarRevision)calendarMessage.textContent='Calendrier indisponible : '+error.message+'. Réessayez en changeant de mois.';
@@ -114,11 +152,12 @@ function bookingSlot(day, packageName, calendarDays, today) {
   }
   document.getElementById('previous-month').addEventListener('click',()=>{month=new Date(month.getFullYear(),month.getMonth()-1,1);renderCalendar()});
   document.getElementById('next-month').addEventListener('click',()=>{month=new Date(month.getFullYear(),month.getMonth()+1,1);renderCalendar()});
-  packageInputs.forEach(input=>input.addEventListener('change',()=>{invalidate();arrival.value='';updatePackage();renderCalendar()}));
-  arrival.addEventListener('input',()=>{invalidate();updatePackage()});
-  arrival.addEventListener('change',()=>{updatePackage();if(arrival.value){month=new Date(arrival.value+'T12:00:00');month.setDate(1)}renderCalendar()});
+  function clearSelection() {invalidate();arrival.value='';departure.value='';updatePackage();renderCalendar()}
+  packageInputs.forEach(input=>input.addEventListener('change',clearSelection));
+  document.getElementById('clear-booking-dates').addEventListener('click',clearSelection);
   guests.addEventListener('input',invalidate);
   async function calculate() {
+    if(!arrival.value||!departure.value){result.className='quote-details quote-error';result.textContent='Cliquez sur votre arrivée puis sur votre départ dans le grand calendrier.';return null}
     if(![arrival,departure,guests].every(input=>input.reportValidity()))return null;
     const current=++revision;quote=null;result.className='quote-details';result.textContent='Vérification du forfait…';calculateButton.disabled=true;
     try {
@@ -134,7 +173,9 @@ function bookingSlot(day, packageName, calendarDays, today) {
   }
   calculateButton.addEventListener('click',calculate);
   form.addEventListener('submit',async event=>{
-    event.preventDefault();if(!form.reportValidity())return;
+    event.preventDefault();
+    if(!arrival.value||!departure.value){await calculate();return}
+    if(!form.reportValidity())return;
     if(!quote){const data=await calculate();status.textContent=data?'Vérifiez le forfait affiché, puis cliquez à nouveau sur « Demander ce séjour ».':'Vérifiez les dates et le message indiqué avant de continuer.';return}
     const data=payload();data.quote_token=quote.token;submit.disabled=true;submit.textContent='Enregistrement…';
     try {

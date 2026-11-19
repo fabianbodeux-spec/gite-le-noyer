@@ -8,6 +8,11 @@ __pycache__/
 !.env.example
 .DS_Store
 *.log
+.noyer-admin-key
+.railway/
+data/
+backups/
+publication-railway/
 index-avant-*.html
 sauvegarde-*.html
 sauvegarde-*.py

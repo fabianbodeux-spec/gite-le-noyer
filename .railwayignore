@@ -1,0 +1,16 @@
+.git/
+.agents/
+.claude/
+.env
+.env.*
+.noyer-admin-key
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+__pycache__/
+*.pyc
+index-avant-*.html
+sauvegarde-*
+data/
+backups/
