@@ -53,17 +53,6 @@ qa('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
 if(new URLSearchParams(location.search).get('sejour')==='midweek')q('#stay-type').value='Groupe de randonnée / mid-week';
 const distance=new URLSearchParams(location.search).get('distance');
 if(['5','10','15','20','30'].includes(distance))q('textarea[name=message]').value='Nous souhaitons un mid-week avec des randonnées autour de '+distance+' km.';
-const arrival=q('#arrival'),departure=q('#departure');
-const pad=n=>String(n).padStart(2,'0');
-const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-arrival.min=departure.min=iso(new Date());
-arrival.addEventListener('change',()=>{
-  if(!arrival.value)return;
-  const [y,m,d]=arrival.value.split('-').map(Number);
-  const next=new Date(y,m-1,d);next.setDate(next.getDate()+1);
-  departure.min=iso(next);
-  if(departure.value&&departure.value<departure.min)departure.value='';
-});
 
 })();
 

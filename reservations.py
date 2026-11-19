@@ -13,6 +13,21 @@ class BookingError(ValueError):
         self.status = status
 
 
+PACKAGES = {
+    'midweek': {'label': 'Mid-week', 'weekday': 0, 'days': 4},
+    'weekend': {'label': 'Week-end', 'weekday': 4, 'days': 3},
+}
+
+
+def stay_package(start, end, requested=None):
+    for key, package in PACKAGES.items():
+        if start.weekday() == package['weekday'] and (end-start).days == package['days']:
+            if requested and requested != key:
+                raise BookingError('Les dates ne correspondent pas au forfait choisi.')
+            return key
+    raise BookingError('Location uniquement en mid-week (lundi 17 h au vendredi 9 h) ou en week-end (vendredi 17 h au lundi 9 h). Aucune location à la nuit.')
+
+
 def parse_date(value):
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
         raise BookingError("Indiquez une date au format AAAA-MM-JJ.")
@@ -94,7 +109,14 @@ class Store:
             connection.execute('''CREATE TABLE IF NOT EXISTS blocks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, start TEXT NOT NULL,
                 end TEXT NOT NULL, reason TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)''')
+            connection.execute('''CREATE TABLE IF NOT EXISTS package_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL,
+                start TEXT NOT NULL, end TEXT NOT NULL,
+                midweek_cents INTEGER NOT NULL, weekend_cents INTEGER NOT NULL,
+                cleaning_cents INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1)''')
             connection.execute('CREATE INDEX IF NOT EXISTS booking_dates ON demandes(status,arrival,departure)')
+            from operations import initialize_operations
+            initialize_operations(connection)
 
     def unavailable(self, connection, arrival, departure, exclude=0):
         booked = connection.execute('''SELECT id FROM demandes WHERE status='confirmed'
@@ -108,27 +130,21 @@ class Store:
             with self.connection() as current:
                 return self.quote(data, current)
         start, end = dates(data.get('arrival'), data.get('departure'))
+        package = stay_package(start, end, data.get('package'))
         guests = integer(data.get('guests', 1), 1, 30, 'Nombre de voyageurs')
         if self.unavailable(connection, start.isoformat(), end.isoformat()):
             raise BookingError("Ces dates ne sont plus disponibles. Choisissez un autre séjour.", 409)
-        rates = list(connection.execute('SELECT * FROM rates WHERE active=1 AND start < ? AND end > ?',
-                                        (end.isoformat(), start.isoformat())))
-        nights, minimum, cleaning = [], 1, None
-        for offset in range((end-start).days):
-            night = start + timedelta(days=offset)
-            rate = next((rate for rate in rates if rate['start'] <= night.isoformat() < rate['end']), None)
-            if rate is None:
-                raise BookingError("Tarif non défini pour le " + night.isoformat() + ". Contactez le propriétaire.", 409)
-            minimum = max(minimum, rate['min_nights'])
-            if cleaning is None:
-                cleaning = rate['cleaning_cents']
-            amount = rate['weekend_cents'] if night.weekday() in (4, 5) else rate['nightly_cents']
-            nights.append({'date': night.isoformat(), 'cents': amount, 'period': rate['label']})
-        if len(nights) < minimum:
-            raise BookingError(f"Ce séjour nécessite au moins {minimum} nuits.", 409)
+        rate = connection.execute('SELECT * FROM package_rates WHERE active=1 AND start <= ? AND end > ?',
+                                  (start.isoformat(), start.isoformat())).fetchone()
+        if rate is None:
+            raise BookingError('Forfait non défini pour cette arrivée. Contactez le propriétaire.', 409)
+        amount = rate[package + '_cents']
         result = {'arrival': start.isoformat(), 'departure': end.isoformat(), 'guests': guests,
-                  'nights': nights, 'cleaning_cents': cleaning, 'currency': 'EUR',
-                  'total_cents': sum(night['cents'] for night in nights) + cleaning}
+                  'package': package, 'package_label': PACKAGES[package]['label'],
+                  'arrival_time': '17:00', 'departure_time': '09:00',
+                  'package_cents': amount, 'period': rate['label'],
+                  'cleaning_cents': rate['cleaning_cents'], 'currency': 'EUR',
+                  'total_cents': amount + rate['cleaning_cents']}
         result['token'] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
         return result
 
@@ -156,18 +172,17 @@ class Store:
         if not 1 <= len(label) <= 100:
             raise BookingError("Nommez la période tarifaire.")
         rate_id = integer(data.get('id', 0), 0, 100000000, 'Identifiant')
-        values = (label, start.isoformat(), end.isoformat(), cents(data.get('nightly')),
-                  cents(data.get('weekend')), cents(data.get('cleaning'), True),
-                  integer(data.get('min_nights'), 1, 366, 'Durée minimale'))
+        values = (label, start.isoformat(), end.isoformat(), cents(data.get('midweek')),
+                  cents(data.get('weekend')), cents(data.get('cleaning'), True))
         with self.connection(True) as connection:
-            if connection.execute('SELECT id FROM rates WHERE active=1 AND start < ? AND end > ? AND id != ?',
+            if connection.execute('SELECT id FROM package_rates WHERE active=1 AND start < ? AND end > ? AND id != ?',
                                   (end.isoformat(), start.isoformat(), rate_id)).fetchone():
                 raise BookingError("Cette période chevauche un tarif existant. Modifiez ou désactivez ce tarif.", 409)
             if rate_id:
-                if not connection.execute('UPDATE rates SET label=?,start=?,end=?,nightly_cents=?,weekend_cents=?,cleaning_cents=?,min_nights=?,active=1 WHERE id=?', values+(rate_id,)).rowcount:
+                if not connection.execute('UPDATE package_rates SET label=?,start=?,end=?,midweek_cents=?,weekend_cents=?,cleaning_cents=?,active=1 WHERE id=?', values+(rate_id,)).rowcount:
                     raise BookingError("Tarif introuvable.", 404)
             else:
-                rate_id = connection.execute('INSERT INTO rates(label,start,end,nightly_cents,weekend_cents,cleaning_cents,min_nights) VALUES (?,?,?,?,?,?,?)', values).lastrowid
+                rate_id = connection.execute('INSERT INTO package_rates(label,start,end,midweek_cents,weekend_cents,cleaning_cents) VALUES (?,?,?,?,?,?)', values).lastrowid
         return {'id': rate_id}
 
     def block(self, data):
@@ -195,8 +210,14 @@ class Store:
                 raise BookingError("Cette transition de statut n’est pas autorisée.", 409)
             if status == 'confirmed':
                 dates(row['arrival'], row['departure'])
+                if not row['name'] or not row['email']:
+                    raise BookingError('Complétez le nom et l’e-mail du voyageur avant confirmation.', 409)
                 if row['quote_json'] is None:
                     raise BookingError("Ancienne demande sans devis : créez une nouvelle demande chiffrée avant confirmation.", 409)
+                quote = json.loads(row['quote_json'])
+                if quote.get('package') not in PACKAGES:
+                    raise BookingError('Ancienne demande à la nuit : recréez un devis au forfait avant confirmation.', 409)
+                stay_package(parse_date(row['arrival']), parse_date(row['departure']), quote['package'])
                 if self.unavailable(connection, row['arrival'], row['departure'], identifier):
                     raise BookingError("Ces dates sont déjà occupées : confirmation impossible.", 409)
             connection.execute('UPDATE demandes SET status=? WHERE id=?', (status, identifier))
@@ -205,6 +226,8 @@ class Store:
     def deactivate(self, table, identifier):
         if table not in ('rates', 'blocks'):
             raise BookingError("Ressource inconnue.", 404)
+        if table == 'rates':
+            table = 'package_rates'
         with self.connection(True) as connection:
             if not connection.execute(f'UPDATE {table} SET active=0 WHERE id=?', (identifier,)).rowcount:
                 raise BookingError("Élément introuvable.", 404)
@@ -214,16 +237,20 @@ class Store:
         year = integer(year, 2000, 2100, 'Année')
         start, end = f'{year}-01-01', f'{year+1}-01-01'
         with self.connection() as connection:
-            rates = [dict(row) for row in connection.execute('SELECT * FROM rates WHERE active=1 AND start < ? AND end > ? ORDER BY start', (end, start))]
+            rates = [dict(row) for row in connection.execute('SELECT * FROM package_rates WHERE active=1 AND start < ? AND end > ? ORDER BY start', (end, start))]
             bookings = [dict(row) for row in connection.execute('SELECT * FROM demandes WHERE arrival < ? AND departure > ? ORDER BY arrival,id', (end, start))]
             blocks = [dict(row) for row in connection.execute('SELECT * FROM blocks WHERE active=1 AND start < ? AND end > ?', (end, start))]
         days, revenue, occupied = [], 0, 0
         for booking in bookings:
             if booking['status'] == 'confirmed' and booking['quote_json']:
                 quote = json.loads(booking['quote_json'])
-                revenue += sum(night['cents'] for night in quote['nights'] if start <= night['date'] < end)
-                if start <= quote['arrival'] < end:
-                    revenue += quote['cleaning_cents']
+                if quote.get('package') in PACKAGES:
+                    if start <= quote['arrival'] < end:
+                        revenue += quote['total_cents']
+                else:
+                    revenue += sum(night['cents'] for night in quote.get('nights', []) if start <= night['date'] < end)
+                    if start <= quote['arrival'] < end:
+                        revenue += quote['cleaning_cents']
         current = date(year, 1, 1)
         while current.year == year:
             night = current.isoformat()
@@ -232,11 +259,18 @@ class Store:
             blocked = any(row['start'] <= night < row['end'] for row in blocks)
             occupied += int(reserved)
             state = 'occupied' if reserved or blocked else 'unpriced' if not rate else 'available'
-            days.append({'date': night, 'state': state, 'cents': None if not rate else rate['weekend_cents'] if current.weekday() in (4, 5) else rate['nightly_cents']})
+            package = 'midweek' if current.weekday() == 0 else 'weekend' if current.weekday() == 4 else None
+            days.append({'date': night, 'state': state,
+                         'cents': rate[package+'_cents'] if rate and package else None,
+                         'package': package, 'price_basis': 'package'})
             current += timedelta(days=1)
         result = {'year': year, 'days': days}
         if private:
             for booking in bookings:
+                quote = json.loads(booking['quote_json']) if booking['quote_json'] else {}
+                booking['package'] = quote.get('package')
+                booking['arrival_time'] = quote.get('arrival_time')
+                booking['departure_time'] = quote.get('departure_time')
                 booking.pop('quote_json', None)
             result.update(rates=rates, bookings=bookings, blocks=blocks,
                           forecast_cents=revenue, confirmed_nights=occupied,

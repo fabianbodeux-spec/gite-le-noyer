@@ -29,42 +29,16 @@
 <button class="gallery-item" type="button" data-group="chambres" aria-label="Agrandir Salle de bain"><img width="800" height="600" loading="lazy" src="/photos/64148.jpg" alt="Salle de bain"><span>Salle de bain <b>+</b></span></button>
 </div>
 </div>
-</section><section class="booking section" id="reserver">
-<div class="wrap booking-layout">
-<div class="booking-copy">
-
-<h2>On prépare votre prochaine parenthèse ?</h2>
-<p>Un séjour de retrouvailles, quelques jours de repos ou un mid-week randonnée : préparez votre demande de groupe.</p>
-<div class="booking-logo"><a class="brand" href="/" aria-label="Le Noyer, accueil"><img src="/favicon.svg" width="49" height="49" alt=""><span><strong>Le Noyer</strong><small>Maison d’Ardenne</small></span></a></div>
-</div>
-<div class="form-card">
-<h3>Imaginons votre séjour.</h3>
-<p>Choisissez vos dates, consultez votre prix et demandez la réservation du logement entier.</p>
-<form id="booking-form">
-<div class="form-row">
-<label>Arrivée<input id="arrival" type="date" name="arrival" required></label>
-<label>Départ<input id="departure" type="date" name="departure" required></label>
-</div>
-<div class="form-row">
-<label>Voyageurs<input type="number" name="guests" min="1" max="30" placeholder="1 à 30" required></label>
-<label>Type de séjour
-<select id="stay-type" name="occasion">
-<option value="">Choisir un type de séjour</option><option value="Groupe de randonnée / mid-week">Groupe de randonnée / mid-week</option>
-<option>Retrouvailles familiales</option>
-<option>Séjour entre amis</option>
-<option>Autre séjour de groupe</option>
-</select></label>
-</div>
-<label>Nom<input type="text" name="name" autocomplete="name" maxlength="100" required placeholder="Prénom et nom"></label>
-<label>E-mail<input type="email" spellcheck="false" name="email" autocomplete="email" maxlength="254" required placeholder="vous@exemple.be"></label>
-<label>Votre projet<textarea name="message" rows="4" maxlength="2000" placeholder="Dates, groupe, randonnées envisagées…"></textarea></label>
-<button type="submit" class="btn" id="submit">Demander ce séjour</button>
-<div class="form-note">Votre demande reste en attente de confirmation du propriétaire. Aucun paiement en ligne ni envoi d’e-mail à ce stade.</div>
-<div id="status" role="status" aria-live="polite"></div>
-</form>
-</div>
-</div>
-</section></main><dialog id="lightbox" aria-label="Photographie agrandie">
+</section><section class="booking section" id="reserver" aria-labelledby="booking-title">
+<div class="wrap booking-layout"><div class="booking-copy"><div><h2 id="booking-title">Quelques jours.<br>Tout le temps pour vous.</h2><p>Une maison entière pour votre groupe. Choisissez votre mid-week ou votre week-end, puis retrouvez-vous au Noyer.</p></div><a class="brand" href="#top" aria-label="Le Noyer, retour en haut"><img src="/favicon.svg" width="49" height="49" alt=""><span><strong>Le Noyer</strong><small>Maison d’Ardenne</small></span></a></div>
+<div class="form-card"><form id="booking-form">
+<fieldset class="package-choices"><legend>Quel séjour vous ressemble ?</legend><div class="package-options"><label class="package-option"><input type="radio" name="package" value="midweek" checked><span><strong>Mid-week</strong><span>Lundi 17 h — vendredi 9 h</span><small>La semaine au vert, à votre rythme.</small></span></label><label class="package-option"><input type="radio" name="package" value="weekend"><span><strong>Week-end</strong><span>Vendredi 17 h — lundi 9 h</span><small>Une vraie pause pour se retrouver.</small></span></label></div></fieldset>
+<p id="package-schedule" class="package-schedule">Arrivée le lundi à 17 h, départ le vendredi à 9 h.</p>
+<div class="booking-form-layout"><div class="booking-calendar"><div class="calendar-heading"><h3>Choisissez votre arrivée</h3><p>Le séjour complet se sélectionne en un clic. Aucune location à la nuit.</p></div><div class="calendar-toolbar"><button type="button" id="previous-month" aria-label="Mois précédent">Précédent</button><h4 id="month-title" aria-live="polite"></h4><button type="button" id="next-month" aria-label="Mois suivant">Suivant</button></div><div id="guest-calendar" class="calendar-grid" aria-label="Calendrier des séjours" aria-busy="false"></div><div class="guest-legend"><span>Arrivée : séjour réservable</span><span>Complet : dates occupées</span><span>À définir : tarif manquant</span></div><p id="calendar-message" role="status" aria-live="polite"></p><p class="calendar-note">Les disponibilités sont celles du calendrier du Noyer. Votre demande reste soumise à confirmation.</p></div>
+<div class="booking-details"><h3>Votre séjour au Noyer</h3><p id="selected-stay" aria-live="polite">Choisissez une arrivée dans le calendrier.</p><div class="form-row"><label>Arrivée à 17 h<input id="arrival" aria-describedby="package-schedule" type="date" name="arrival" required></label><label>Départ à 9 h<input id="departure" aria-describedby="package-schedule" type="date" name="departure" readonly required></label></div><label>Nombre de voyageurs<input type="number" name="guests" min="1" max="30" placeholder="1 à 30 personnes" required></label>
+<button type="button" class="btn" id="calculate-quote">Voir le prix de mon forfait</button><div id="quote-result" class="quote-details" role="status" aria-live="polite"></div>
+<div class="booking-contact"><h4>Les coordonnées de votre groupe</h4><label>Type de séjour<select id="stay-type" name="occasion"><option value="">Choisir un type de séjour</option><option value="Groupe de randonnée / mid-week">Groupe de randonnée / mid-week</option><option>Retrouvailles familiales</option><option>Séjour entre amis</option><option>Autre séjour de groupe</option></select></label><label>Nom<input name="name" type="text" autocomplete="name" maxlength="100" required placeholder="Prénom et nom…"></label><label>E-mail<input name="email" type="email" autocomplete="email" spellcheck="false" maxlength="254" required placeholder="vous@exemple.be…"></label><label>Votre projet<textarea name="message" rows="3" maxlength="2000" placeholder="Votre groupe, vos envies de séjour…"></textarea></label></div>
+<button type="submit" class="btn" id="submit">Demander ce séjour</button><div class="form-note">Aucun paiement en ligne à cette étape. La demande est enregistrée pour le propriétaire ; aucun e-mail automatique n’est envoyé.</div><div id="status" role="status" aria-live="polite"></div></div></div></form></div></div></section></main><dialog id="lightbox" aria-label="Photographie agrandie">
 <div class="dialog-head"><span id="photo-title"></span><button id="photo-close" type="button" aria-label="Fermer">✕</button></div>
 <div class="dialog-body"><button type="button" id="prev" aria-label="Photo précédente">←</button><img id="large-photo" alt=""><button type="button" id="next" aria-label="Photo suivante">→</button></div>
 </dialog><footer><div class="footer-top"><a class="brand" href="/" aria-label="Le Noyer, accueil"><img src="/favicon.svg" width="49" height="49" alt=""><span><strong>Le Noyer</strong><small>Maison d’Ardenne</small></span></a><p>Rue Bierleux 69A<br>4990 Lierneux, Belgique<br><a href="https://www.google.com/maps/search/?api=1&query=Rue+Bierleux+69A+4990+Lierneux+Belgique" target="_blank" rel="noopener noreferrer">Localiser la maison</a></p></div><div class="footer-bottom"><span>Le Noyer · Une maison à partager.</span><a href="/midweek.html">L’espace des marcheurs</a><a href="#top">Retour en haut</a></div></footer><div class="mobile-book"><a class="btn" href="/#reserver">Préparer mon séjour</a></div></body></html>

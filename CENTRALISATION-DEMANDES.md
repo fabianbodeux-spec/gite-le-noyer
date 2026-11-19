@@ -4,7 +4,7 @@
 
 Utiliser `/admin` comme point de départ quotidien pour toutes les demandes : site du Noyer, trois plateformes de location, téléphone et e-mail. Voir l’origine, les dates, le prix proposé, le statut et la prochaine action sans devoir consulter plusieurs tableaux.
 
-Cette branche prépare la proposition pour Ardennes-étape, Villa for You et Belvilla. Aucun compte externe n’est connecté, aucune synchronisation ni réponse automatique n’est activée. Les moyens d’accès autorisés pour ce logement restent à préciser.
+Cette branche contient une première mise en œuvre manuelle pour Ardennes-étape, Villa for You et Belvilla : ajout et préremplissage de demandes externes, suivi commun, notes, checklists et brouillons de réponse dans le backend. Aucun compte externe n’est connecté, aucune synchronisation ni réponse automatique n’est activée. Les moyens d’accès autorisés pour ce logement restent à préciser. Voir `README.md` pour les fonctions effectivement disponibles ; les étapes d’intégration automatique ci-dessous restent des propositions.
 
 ## Connexions adaptées aux trois plateformes
 

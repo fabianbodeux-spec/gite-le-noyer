@@ -13,11 +13,35 @@ import sqlite3
 import webbrowser
 
 from reservations import Store, BookingError
+from operations import Operations, preview_email
 
 ROOT = Path(__file__).resolve().parent
 
 
+def load_admin_token(root=ROOT, required=False):
+    configured = os.environ.get('NOYER_ADMIN_TOKEN')
+    if required and configured is None:
+        raise SystemExit('Configurez NOYER_ADMIN_TOKEN avant de démarrer le service en ligne.')
+    if configured is not None:
+        token = configured.strip()
+    else:
+        target = root / '.noyer-admin-key'
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            token = target.read_text().strip()
+        else:
+            token = secrets.token_urlsafe(32)
+            with os.fdopen(descriptor, 'w') as stream:
+                stream.write(token + '\n')
+        target.chmod(0o600)
+    if len(token) < 24 or any(character.isspace() for character in token):
+        raise SystemExit('La clé propriétaire doit contenir au moins 24 caractères, sans espace. Vérifiez NOYER_ADMIN_TOKEN ou .noyer-admin-key.')
+    return token
+
+
 def make_handler(store, admin_token, root=ROOT):
+    operations = Operations(store)
     class Handler(BaseHTTPRequestHandler):
         def respond(self, status, body, mime='application/json; charset=utf-8'):
             if isinstance(body, dict):
@@ -43,7 +67,7 @@ def make_handler(store, admin_token, root=ROOT):
                 raise BookingError('JSON requis.', 415)
             try:
                 length = int(self.headers.get('Content-Length', 0))
-                if not 1 <= length <= 16000:
+                if not 1 <= length <= (64000 if urlsplit(self.path).path.startswith('/api/admin/') else 16000):
                     length = 0
                 if length:
                     data = json.loads(self.rfile.read(length))
@@ -62,6 +86,13 @@ def make_handler(store, admin_token, root=ROOT):
             try:
                 url = urlsplit(self.path)
                 params = parse_qs(url.query)
+                if url.path == '/healthz':
+                    with store.connection() as connection:
+                        connection.execute('SELECT 1').fetchone()
+                    return self.respond(200, {'ok': True})
+                if url.path == '/api/admin/workspace':
+                    self.authorize()
+                    return self.respond(200, operations.workspace(params.get('year', [str(date.today().year)])[0]))
                 if url.path in ('/api/availability', '/api/admin/state'):
                     private = url.path == '/api/admin/state'
                     if private:
@@ -69,7 +100,7 @@ def make_handler(store, admin_token, root=ROOT):
                     return self.respond(200, store.calendar(params.get('year', [str(date.today().year)])[0], private))
                 path = unquote(url.path)
                 relative = {'/': 'index.html', '/admin': 'admin.html'}.get(path, path.lstrip('/'))
-                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css')
+                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css')
                 allowed = allowed or bool(re.fullmatch(r'photos/[0-9]+\.jpg|traces/promenade-12\.(gpx|geojson)', relative))
                 target = (root / relative).resolve()
                 if not allowed or not target.is_relative_to(root.resolve()) or not target.is_file():
@@ -94,6 +125,20 @@ def make_handler(store, admin_token, root=ROOT):
                     return self.respond(200, store.save_rate(data))
                 if path == '/api/admin/blocks':
                     return self.respond(201, store.block(data))
+                if path == '/api/admin/import-preview':
+                    return self.respond(200, preview_email(data.get('text')))
+                if path == '/api/admin/external':
+                    return self.respond(201, operations.add_inquiry(data))
+                if path == '/api/admin/rates/bulk':
+                    return self.respond(200, operations.bulk_rates(data))
+                match = re.fullmatch(r'/api/admin/external/(\d+)', path)
+                if match:
+                    return self.respond(200, operations.add_inquiry(data, int(match[1])))
+                match = re.fullmatch(r'/api/admin/requests/(\d+)/(workflow|draft)', path)
+                if match:
+                    if match[2] == 'workflow':
+                        return self.respond(200, operations.update_workflow(int(match[1]), data))
+                    return self.respond(200, operations.draft(int(match[1]), data.get('kind')))
                 match = re.fullmatch(r'/api/admin/requests/(\d+)/status', path)
                 if match:
                     return self.respond(200, store.status(int(match[1]), data.get('status')))
@@ -112,9 +157,7 @@ def make_handler(store, admin_token, root=ROOT):
 def main():
     store = Store(ROOT / 'demandes.sqlite3')
     store.initialize()
-    token = os.environ.get('NOYER_ADMIN_TOKEN') or secrets.token_urlsafe(32)
-    if len(token) < 24:
-        raise SystemExit('NOYER_ADMIN_TOKEN doit contenir au moins 24 caractères.')
+    token = load_admin_token()
     server = None
     for port in (8040, 8041, 8042):
         try:

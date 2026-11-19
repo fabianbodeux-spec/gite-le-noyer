@@ -4,6 +4,7 @@
   const year = element('year');year.value=new Date().getFullYear();
   let token = '';
   let generation = 0;
+  let workspaceReady = false;
   const blockForm = element('block-form');
   const blockStart = element('block-start');
   const blockEnd = element('block-end');
@@ -42,8 +43,18 @@
   blockEnd.addEventListener('input',updateSelection);
   element('clear-block').addEventListener('click',()=>{blockForm.reset();updateSelection();element('block-status').textContent='Sélection effacée. Choisissez une arrivée et un départ.'});
   async function api(path, data) {
-    const response=await fetch('/api/admin/'+path,{method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
-    const result=await response.json();if(!response.ok)throw Error(result.error || 'Réessayez.');return result;
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    try {
+      const response=await fetch('/api/admin/'+path,{signal:controller.signal,method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
+      if(response.status===401)throw Error('Clé refusée. Utilisez la clé affichée dans le Terminal pour '+location.host+'. Copiez uniquement la clé, sans le libellé.');
+      if(response.status===404)throw Error('Le serveur actif utilise une ancienne version. Arrêtez-le avec Ctrl+C, relancez python3 ~/le-noyer-v6/demarrer.py puis rechargez cette page.');
+      const result=await response.json();if(!response.ok)throw Error(result.error || 'Réessayez.');return result;
+    } catch(error) {
+      if(error.name==='AbortError')throw Error('Le serveur ne répond pas. Vérifiez le Terminal et l’adresse de gestion affichée au démarrage.');
+      if(error instanceof TypeError)throw Error('Serveur inaccessible. Relancez le site puis utilisez exactement l’adresse Gestion affichée dans Terminal.');
+      throw error;
+    } finally {clearTimeout(timeout)}
   }
   function text(parent, tag, content) {const node=document.createElement(tag);node.textContent=content;parent.append(node);return node}
   function action(parent, label, callback) {
@@ -54,7 +65,7 @@
   async function refresh() {
     if(!year.reportValidity())return;
     const current=++generation;
-    const state=await api('state?year='+year.value);
+    const [state,workspace]=await Promise.all([api('state?year='+year.value),api('workspace?year='+year.value)]);
     if(current!==generation || !token)return;
     element('management').hidden=false;element('login').hidden=true;
     element('admin-status').textContent='Données actualisées. Les montants sont prévisionnels, pas des encaissements.';
@@ -70,38 +81,31 @@
       for(let count=0;count<offset;count++)grid.append(document.createElement('span'));
       state.days.filter(day=>Number(day.date.slice(5,7))===month+1).forEach(day=>{
         const cell=text(grid,'button',Number(day.date.slice(8)));cell.type='button';cell.className='calendar-day';cell.dataset.state=day.state;cell.dataset.date=day.date;
-        cell.title=localDate(day.date)+' : '+({available:'disponible',occupied:'occupé',unpriced:'tarif manquant'}[day.state])+(day.cents===null?'':' / '+money(day.cents));
+        cell.title=localDate(day.date)+' : '+({available:'disponible',occupied:'occupé',unpriced:'tarif manquant'}[day.state])+(day.cents===null?'':' / forfait '+(day.package==='midweek'?'mid-week':'week-end')+' '+money(day.cents));
         cell.setAttribute('aria-label',cell.title+'. Choisir cette date.');cell.disabled=day.date<today;
         cell.addEventListener('click',()=>selectDate(day.date));
       });
       section.append(grid);element('admin-calendar').append(section);
     }
-    element('rates').replaceChildren();
-    if(!state.rates.length)text(element('rates'),'p','Aucun tarif défini pour cette année. Renseignez vos prix pour ouvrir les demandes.');
-    state.rates.forEach(rate=>{
-      const actions=record(element('rates'),rate.label,rate.start+' au '+rate.end+' (fin exclue)\nSemaine : '+money(rate.nightly_cents)+' / ven.-sam. : '+money(rate.weekend_cents)+'\nMénage : '+money(rate.cleaning_cents)+' / minimum '+rate.min_nights+' nuits');
-      action(actions,'Modifier',()=>{const fields=element('rate-form').elements;Object.entries({id:rate.id,label:rate.label,start:rate.start,end:rate.end,nightly:rate.nightly_cents/100,weekend:rate.weekend_cents/100,cleaning:rate.cleaning_cents/100,min_nights:rate.min_nights}).forEach(([key,value])=>fields.namedItem(key).value=value);fields.namedItem('label').focus()});
-      action(actions,'Désactiver',async()=>{await api('rates/'+rate.id+'/deactivate',{});await refresh()});
-    });
     element('blocks').replaceChildren();
     if(!state.blocks.length)text(element('blocks'),'p','Aucune période bloquée pour cette année.');
     state.blocks.forEach(block=>{const actions=record(element('blocks'),block.reason,localDate(block.start)+' au '+localDate(block.end));action(actions,'Libérer ces dates',async()=>{await api('blocks/'+block.id+'/deactivate',{});await refresh()})});
     updateSelection();
-    element('requests').replaceChildren();
-    const labels={pending:'En attente',confirmed:'Confirmé',cancelled:'Annulé',rejected:'Refusé'};
-    if(!state.bookings.length)text(element('requests'),'p','Aucune demande sur cette année.');
-    state.bookings.forEach(booking=>{
-      const actions=record(element('requests'),'N° '+booking.id+' · '+booking.name+' · '+labels[booking.status],booking.arrival+' au '+booking.departure+' / '+booking.guests+' voyageurs\n'+booking.email+'\n'+booking.occasion+'\n'+booking.message+'\nPrix demandé : '+money(booking.total_cents));
-      async function change(status){await api('requests/'+booking.id+'/status',{status});await refresh()}
-      if(booking.status==='pending'){
-        if(booking.total_cents!==null)action(actions,'Confirmer ce séjour',()=>change('confirmed'));
-        action(actions,'Refuser la demande',()=>change('rejected'));
-      }
-      if(booking.status==='confirmed')action(actions,'Annuler et libérer les dates',()=>change('cancelled'));
-    });
+    window.NoyerWorkspace.render(workspace,state);
   }
-  element('login').addEventListener('submit',async event=>{event.preventDefault();token=element('admin-token').value;try{await refresh();element('admin-token').value=''}catch(error){token='';element('admin-status').textContent=error.message}});
-  element('logout').addEventListener('click',()=>{token='';generation++;element('management').hidden=true;element('login').hidden=false;['rates','blocks','requests','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());element('admin-status').textContent='Gestion fermée.'});
+  element('login').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const trigger=event.currentTarget.querySelector('button');trigger.disabled=true;
+    element('admin-status').textContent='Connexion au backend…';
+    token=element('admin-token').value.trim().replace(/^Cl[ée]\s+propri[ée]taire\s*:\s*/i,'').trim();
+    try {
+      if(!window.NoyerWorkspace)throw Error('Le module de gestion n’a pas chargé. Arrêtez le serveur avec Ctrl+C, relancez python3 ~/le-noyer-v6/demarrer.py puis rechargez la page.');
+      if(!workspaceReady){window.NoyerWorkspace.connect(api,refresh);workspaceReady=true}
+      await refresh();element('admin-token').value='';
+    }catch(error){token='';element('admin-status').textContent=error.message}
+    finally{trigger.disabled=false}
+  });
+  element('logout').addEventListener('click',()=>{window.NoyerWorkspace?.clear();token='';generation++;element('management').hidden=true;element('login').hidden=false;['rates','blocks','requests','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());element('admin-status').textContent='Gestion fermée.'});
   element('refresh').addEventListener('click',()=>refresh().catch(error=>element('admin-status').textContent=error.message));
   year.addEventListener('change',()=>refresh().catch(error=>element('admin-status').textContent=error.message));
   function resetRate(){element('rate-form').reset();element('rate-form').elements.namedItem('id').value=0}

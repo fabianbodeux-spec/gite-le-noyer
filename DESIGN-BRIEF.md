@@ -46,6 +46,13 @@ Créer et utiliser une identité cohérente :
 - Pas de défilement automatique décoratif
 - Pas de style générique de site généré par IA
 
+## Règles de location
+- Aucune location à la nuit.
+- Mid-week : lundi à 17 h jusqu’au vendredi à 9 h.
+- Week-end : vendredi à 17 h jusqu’au lundi à 9 h.
+- Prix forfaitaire du logement entier, selon la période d’arrivée.
+- Les blocages personnels ou externes restent libres de dates.
+
 ## Exigences techniques
 - Préserver les photos et les GPX locaux
 - Préserver demandes.sqlite3
