@@ -20,12 +20,18 @@ PACKAGES = {
 
 
 def stay_package(start, end, requested=None):
-    for key, package in PACKAGES.items():
-        if start.weekday() == package['weekday'] and (end-start).days == package['days']:
-            if requested and requested != key:
-                raise BookingError('Les dates ne correspondent pas au forfait choisi.')
-            return key
-    raise BookingError('Location uniquement en mid-week (lundi 17 h au vendredi 9 h) ou en week-end (vendredi 17 h au lundi 9 h). Aucune location à la nuit.')
+    nights=(end-start).days
+    requested=requested or None
+    if requested not in (None,'midweek','weekend'):
+        raise BookingError('Choisissez un séjour mid-week ou week-end.')
+    midweek_ok=start.weekday() in (0,1,2) and nights>=2 and end<=start+timedelta(days=4-start.weekday())
+    weekend_ok=start.weekday() in (4,5) and nights>=2 and end<=start+timedelta(days=7-start.weekday())
+    if requested=='midweek' and midweek_ok:return 'midweek'
+    if requested=='weekend' and weekend_ok:return 'weekend'
+    if requested is None:
+        if midweek_ok:return 'midweek'
+        if weekend_ok:return 'weekend'
+    raise BookingError('Mid-week : arrivée du lundi au mercredi, au moins 2 nuits, départ au plus tard vendredi à 9 h. Week-end : arrivée vendredi ou samedi, au moins 2 nuits, départ au plus tard lundi à 9 h.')
 
 
 def parse_date(value):
@@ -138,10 +144,13 @@ class Store:
                                   (start.isoformat(), start.isoformat())).fetchone()
         if rate is None:
             raise BookingError('Forfait non défini pour cette arrivée. Contactez le propriétaire.', 409)
-        amount = rate[package + '_cents']
+        base_amount = rate[package + '_cents']
+        nights=(end-start).days
+        amount = (base_amount*nights+2)//4 if package=='midweek' else base_amount
         result = {'arrival': start.isoformat(), 'departure': end.isoformat(), 'guests': guests,
                   'package': package, 'package_label': PACKAGES[package]['label'],
                   'arrival_time': '17:00', 'departure_time': '09:00',
+                  'nights':nights,'base_package_cents':base_amount,
                   'package_cents': amount, 'period': rate['label'],
                   'cleaning_cents': rate['cleaning_cents'], 'currency': 'EUR',
                   'total_cents': amount + rate['cleaning_cents']}
@@ -164,6 +173,8 @@ class Store:
                 (datetime.now().isoformat(timespec='seconds'), name, email, quote['arrival'], quote['departure'],
                  quote['guests'], str(data.get('occasion', ''))[:100], str(data.get('message', ''))[:2000],
                  json.dumps(quote, ensure_ascii=False), quote['total_cents']))
+            from operations import record_event
+            record_event(connection,cursor.lastrowid,'request_received','guest',{'origin':'site','quote_total_cents':quote['total_cents']})
             return {'id': cursor.lastrowid, 'status': 'pending', 'total_cents': quote['total_cents']}
 
     def save_rate(self, data):
@@ -201,7 +212,9 @@ class Store:
         if status not in ('confirmed', 'cancelled', 'rejected'):
             raise BookingError("Statut invalide.")
         with self.connection(True) as connection:
-            row = connection.execute('SELECT * FROM demandes WHERE id=?', (identifier,)).fetchone()
+            row = connection.execute('''SELECT demandes.*,COALESCE(workflow.source,'direct') AS source
+                FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
+                WHERE demandes.id=?''', (identifier,)).fetchone()
             if row is None:
                 raise BookingError("Demande introuvable.", 404)
             if row['status'] == status:
@@ -210,17 +223,25 @@ class Store:
                 raise BookingError("Cette transition de statut n’est pas autorisée.", 409)
             if status == 'confirmed':
                 dates(row['arrival'], row['departure'])
-                if not row['name'] or not row['email']:
-                    raise BookingError('Complétez le nom et l’e-mail du voyageur avant confirmation.', 409)
-                if row['quote_json'] is None:
-                    raise BookingError("Ancienne demande sans devis : créez une nouvelle demande chiffrée avant confirmation.", 409)
-                quote = json.loads(row['quote_json'])
-                if quote.get('package') not in PACKAGES:
-                    raise BookingError('Ancienne demande à la nuit : recréez un devis au forfait avant confirmation.', 409)
-                stay_package(parse_date(row['arrival']), parse_date(row['departure']), quote['package'])
+                if row['source'] == 'direct':
+                    if not row['name'] or not row['email']:
+                        raise BookingError('Complétez le nom et l’e-mail du voyageur avant confirmation.', 409)
+                    if row['quote_json'] is None:
+                        raise BookingError("Ancienne demande sans devis : créez une nouvelle demande chiffrée avant confirmation.", 409)
+                    quote = json.loads(row['quote_json'])
+                    if quote.get('package') not in PACKAGES:
+                        raise BookingError('Ancienne demande à la nuit : recréez un devis au forfait avant confirmation.', 409)
+                    stay_package(parse_date(row['arrival']), parse_date(row['departure']), quote['package'])
                 if self.unavailable(connection, row['arrival'], row['departure'], identifier):
                     raise BookingError("Ces dates sont déjà occupées : confirmation impossible.", 409)
             connection.execute('UPDATE demandes SET status=? WHERE id=?', (status, identifier))
+            event_type={
+                'confirmed':'reservation_confirmed' if row['source']=='direct' else 'external_dates_validated',
+                'cancelled':'reservation_cancelled',
+                'rejected':'request_rejected',
+            }[status]
+            from operations import record_event
+            record_event(connection,identifier,event_type,'owner',{'source':row['source']})
         return {'status': status}
 
     def deactivate(self, table, identifier):
@@ -238,11 +259,13 @@ class Store:
         start, end = f'{year}-01-01', f'{year+1}-01-01'
         with self.connection() as connection:
             rates = [dict(row) for row in connection.execute('SELECT * FROM package_rates WHERE active=1 AND start < ? AND end > ? ORDER BY start', (end, start))]
-            bookings = [dict(row) for row in connection.execute('SELECT * FROM demandes WHERE arrival < ? AND departure > ? ORDER BY arrival,id', (end, start))]
+            bookings = [dict(row) for row in connection.execute('''SELECT demandes.*,COALESCE(workflow.source,'direct') AS source
+                FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
+                WHERE arrival < ? AND departure > ? ORDER BY arrival,id''', (end, start))]
             blocks = [dict(row) for row in connection.execute('SELECT * FROM blocks WHERE active=1 AND start < ? AND end > ?', (end, start))]
         days, revenue, occupied = [], 0, 0
         for booking in bookings:
-            if booking['status'] == 'confirmed' and booking['quote_json']:
+            if booking['status'] == 'confirmed' and booking['source'] == 'direct' and booking['quote_json']:
                 quote = json.loads(booking['quote_json'])
                 if quote.get('package') in PACKAGES:
                     if start <= quote['arrival'] < end:
@@ -259,7 +282,7 @@ class Store:
             blocked = any(row['start'] <= night < row['end'] for row in blocks)
             occupied += int(reserved)
             state = 'occupied' if reserved or blocked else 'unpriced' if not rate else 'available'
-            package = 'midweek' if current.weekday() == 0 else 'weekend' if current.weekday() == 4 else None
+            package = 'midweek' if current.weekday() in (0,1,2) else 'weekend' if current.weekday() in (4,5) else None
             days.append({'date': night, 'state': state,
                          'cents': rate[package+'_cents'] if rate and package else None,
                          'package': package, 'price_basis': 'package'})
@@ -271,6 +294,8 @@ class Store:
                 booking['package'] = quote.get('package')
                 booking['arrival_time'] = quote.get('arrival_time')
                 booking['departure_time'] = quote.get('departure_time')
+                if booking['source'] != 'direct':
+                    booking['total_cents'] = None
                 booking.pop('quote_json', None)
             result.update(rates=rates, bookings=bookings, blocks=blocks,
                           forecast_cents=revenue, confirmed_nights=occupied,

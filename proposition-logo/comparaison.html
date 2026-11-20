@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proposition d’équilibre — Le Noyer</title>
+  <style>
+    :root { color-scheme: light; --forest: #183628; --ivory: #f8f6ef; --copper: #aa8061; --ink: #24372d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 40px 20px; background: var(--ivory); color: var(--ink); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 900px; margin: auto; }
+    h1 { margin: 0 0 8px; color: var(--forest); font: 500 clamp(30px, 5vw, 46px)/1.1 Georgia, serif; }
+    .intro { margin: 0 0 28px; color: #536257; }
+    .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    article { min-height: 300px; display: grid; place-items: center; align-content: center; gap: 18px; padding: 26px; border: 1px solid #dedfd5; border-radius: 18px; background: #fff; }
+    img { width: 150px; height: 150px; }
+    h2 { margin: 0; color: var(--forest); font: 500 22px Georgia, serif; }
+    .note { margin: 24px 0 0; padding: 16px 18px; border-left: 3px solid var(--copper); background: #efeee5; }
+    @media (max-width: 580px) { body { padding: 28px 16px; } .compare { grid-template-columns: 1fr; } article { min-height: 240px; } img { width: 120px; height: 120px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Le Noyer — étude d’équilibre</h1>
+    <p class="intro">Une retouche discrète de l’emblème, en gardant son monogramme, ses couleurs et son dessin.</p>
+    <div class="compare">
+      <article><img src="favicon-actuel.svg" alt="Logo actuel"><h2>Logo actuel</h2></article>
+      <article><img src="favicon-proposition.svg" alt="Logo proposé"><h2>Proposition</h2></article>
+    </div>
+    <p class="note"><strong>Retouche proposée :</strong> déplacer la cime d’un pixel vers la droite et raccourcir légèrement le tronc. Le petit espace entre l’arbre et la diagonale du N évite leur croisement visuel et allège la zone supérieure gauche, sans changer l’identité du logo.</p>
+  </main>
+</body>
+</html>

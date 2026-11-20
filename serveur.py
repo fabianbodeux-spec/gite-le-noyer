@@ -134,11 +134,17 @@ def make_handler(store, admin_token, root=ROOT):
                 match = re.fullmatch(r'/api/admin/external/(\d+)', path)
                 if match:
                     return self.respond(200, operations.add_inquiry(data, int(match[1])))
-                match = re.fullmatch(r'/api/admin/requests/(\d+)/(workflow|draft)', path)
+                match = re.fullmatch(r'/api/admin/requests/(\d+)/(workflow|draft|payment|message-sent|cleaning-notified)', path)
                 if match:
                     if match[2] == 'workflow':
                         return self.respond(200, operations.update_workflow(int(match[1]), data))
-                    return self.respond(200, operations.draft(int(match[1]), data.get('kind')))
+                    if match[2] == 'draft':
+                        return self.respond(200, operations.draft(int(match[1]), data.get('kind'), data.get('payment_id')))
+                    if match[2] == 'payment':
+                        return self.respond(200, operations.record_payment(int(match[1]), data))
+                    if match[2] == 'cleaning-notified':
+                        return self.respond(200, operations.mark_cleaning_team_notified(int(match[1]),data.get('channel')))
+                    return self.respond(200, operations.mark_message_sent(int(match[1]), data))
                 match = re.fullmatch(r'/api/admin/requests/(\d+)/status', path)
                 if match:
                     return self.respond(200, store.status(int(match[1]), data.get('status')))

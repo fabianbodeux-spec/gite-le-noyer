@@ -66,7 +66,7 @@ Ouvrir l’adresse HTTPS indiquée pour voir le site. Ajouter `/admin` pour la g
 
 La base de ce Mac n’est pas envoyée : le premier déploiement crée une base vide sur le volume. Les tarifs et blocages du Mac ne seront donc pas automatiquement présents en ligne. La copie locale reste intacte. Avant d’accepter des demandes publiques, soit saisir les forfaits et indisponibilités dans la nouvelle gestion, soit organiser une migration contrôlée de la base locale vers le volume avec sauvegarde et arrêt des écritures. Ne pas remplacer un fichier SQLite pendant que l’application l’utilise.
 
-Le volume conserve les données entre redéploiements. Activer également les sauvegardes du volume dans Railway. Le paiement en ligne, l’envoi automatique d’e-mails et les connexions aux trois plateformes ne sont pas activés par ce déploiement.
+Le volume conserve les données entre redéploiements. Activer également les sauvegardes du volume dans Railway. Aucun paiement en ligne, envoi automatique de courriels ni connexion aux plateformes n’est activé. La gestion prépare les courriels pour copier-coller dans votre messagerie privée ; après l’envoi, confirmez l’étape dans le dossier.
 
 ## Déploiement via GitHub, en alternative
 

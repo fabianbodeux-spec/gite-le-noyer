@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Proposition d’emblème Le Noyer">
+  <rect width="64" height="64" rx="18" fill="#183628"/>
+  <path d="M17 46V18l30 28V18" fill="none" stroke="#f8f6ef" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M33 28V14M33 23c-9 0-13-5-13-11 9 0 13 5 13 11Zm0 0c9 0 13-5 13-11-9 0-13 5-13 11Z" fill="none" stroke="#f8f6ef" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

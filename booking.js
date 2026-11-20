@@ -5,25 +5,31 @@ function bookingDateAfter(value, count) {
 }
 
 function bookingSlot(day, packageName, calendarDays, today) {
-  const weekday = packageName==='midweek'?1:5;
-  if (new Date(day.date+'T12:00:00').getDay()!==weekday) return {selectable:false,reason:'other'};
+  const weekday = new Date(day.date+'T12:00:00').getDay();
+  const validArrival=packageName==='midweek'?[1,2,3].includes(weekday):[5,6].includes(weekday);
+  if (!validArrival) return {selectable:false,reason:'other',departures:[]};
   if (day.date<today) return {selectable:false,reason:'past'};
-  const duration = packageName==='midweek'?4:3;
-  const departure = bookingDateAfter(day.date,duration);
-  for (let offset=0;offset<duration;offset++) {
-    const night=calendarDays.get(bookingDateAfter(day.date,offset));
-    if (!night) return {selectable:false,reason:'unknown'};
-    if (night.state==='occupied') return {selectable:false,reason:'occupied'};
+  if (day.cents===null || day.price_basis!=='package') return {selectable:false,reason:'unpriced',departures:[]};
+  const maxNights=packageName==='midweek'?5-weekday:(weekday===5?3:2);
+  const departures=[];
+  for(let nights=2;nights<=maxNights;nights++) {
+    let free=true;
+    for(let offset=0;offset<nights;offset++) {
+      const night=calendarDays.get(bookingDateAfter(day.date,offset));
+      if(!night){free=false;break}
+      if(night.state==='occupied'){free=false;break}
+    }
+    if(free)departures.push(bookingDateAfter(day.date,nights));
   }
-  if (day.cents===null || day.price_basis!=='package') return {selectable:false,reason:'unpriced'};
-  return {selectable:true,reason:'available',departure};
+  if(!departures.length)return {selectable:false,reason:'occupied',departures:[]};
+  return {selectable:true,reason:'available',departures};
 }
 
 function bookingDateChoice(selection, value, packageName, calendarDays, today) {
   const start=calendarDays.get(selection.arrival);
   if(selection.arrival&&!selection.departure&&start) {
     const slot=bookingSlot(start,packageName,calendarDays,today);
-    if(slot.selectable&&value===slot.departure)return {arrival:selection.arrival,departure:value};
+    if(slot.selectable&&slot.departures.includes(value))return {arrival:selection.arrival,departure:value};
   }
   const day=calendarDays.get(value);
   if(day&&bookingSlot(day,packageName,calendarDays,today).selectable)return {arrival:value,departure:''};
@@ -52,21 +58,24 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
   const payload=()=>Object.fromEntries(new FormData(form));
   function invalidate() {quote=null;revision++;result.replaceChildren();status.textContent='';status.className=''}
   function updatePackage() {
-    const weekday=packageField.value==='midweek'?1:5;
-    const first=new Date(today+'T12:00:00');
-    const minimum=bookingDateAfter(today,(weekday-first.getDay()+7)%7);
-    arrival.min=minimum;arrival.step='7';arrival.setCustomValidity('');
+    arrival.min=today;arrival.step='1';arrival.setCustomValidity('');departure.setCustomValidity('');
     if(arrival.value) {
       const start=new Date(arrival.value+'T12:00:00');
-      if(start.getDay()!==weekday)arrival.setCustomValidity(packageField.value==='midweek'?'Choisissez un lundi pour le mid-week.':'Choisissez un vendredi pour le week-end.');
+      const weekday=start.getDay(),valid=packageField.value==='midweek'?[1,2,3].includes(weekday):[5,6].includes(weekday);
+      if(!valid)arrival.setCustomValidity(packageField.value==='midweek'?'Choisissez une arrivée entre lundi et mercredi.':'Choisissez une arrivée le vendredi ou le samedi.');
       else if(arrival.value<today)arrival.setCustomValidity('Choisissez une date d’arrivée à venir.');
-      else departure.min=bookingDateAfter(arrival.value,packageField.value==='midweek'?4:3);
+      const maxNights=packageField.value==='midweek'?5-weekday:(weekday===5?3:2);
+      departure.min=bookingDateAfter(arrival.value,2);departure.max=bookingDateAfter(arrival.value,maxNights);
+      if(departure.value) {
+        const nights=(new Date(departure.value+'T12:00:00')-start)/86400000;
+        if(nights<2||nights>maxNights)departure.setCustomValidity('Le séjour doit durer au moins deux nuits et respecter la période choisie.');
+      }
     }
-    document.getElementById('package-schedule').textContent=packageField.value==='midweek'?'Arrivée le lundi à 17 h, départ le vendredi à 9 h.':'Arrivée le vendredi à 17 h, départ le lundi à 9 h.';
+    document.getElementById('package-schedule').textContent=packageField.value==='midweek'?'Arrivée du lundi au mercredi à 17 h, départ au plus tard vendredi à 9 h. Minimum 2 nuits, tarif ajusté selon la durée.':'Arrivée vendredi ou samedi à 17 h, départ au plus tard lundi à 9 h. Minimum 2 nuits, tarif week-end fixe.';
     document.getElementById('selected-stay').textContent=departure.value
       ?packageLabel()+' du '+prettyDate(arrival.value)+' à 17 h au '+prettyDate(departure.value)+' à 9 h.'
       :arrival.value
-        ?'Arrivée le '+prettyDate(arrival.value)+' à 17 h. Cliquez maintenant sur '+(packageField.value==='midweek'?'le vendredi':'le lundi')+' de départ dans le calendrier.'
+        ?'Arrivée le '+prettyDate(arrival.value)+' à 17 h. Choisissez un départ parmi les dates proposées (minimum 2 nuits).'
         :'Cliquez sur votre arrivée, puis sur votre départ dans le calendrier.';
   }
   async function api(path,data) {
@@ -99,7 +108,7 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
       let available=0;
       calendars.find(data=>data.year===year).days.filter(day=>Number(day.date.slice(5,7))===selectedMonth+1).forEach(day=>{
         const slot=bookingSlot(day,packageField.value,days,today);
-        const endChoice=Boolean(pendingSlot?.selectable&&day.date===pendingSlot.departure);
+        const endChoice=Boolean(pendingSlot?.selectable&&pendingSlot.departures.includes(day.date));
         const candidate=slot.reason!=='other'||endChoice;
         const cell=document.createElement(candidate?'button':'span');
         cell.className='calendar-day';
@@ -119,13 +128,14 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
           cell.setAttribute('aria-label',endChoice
             ?'Choisir le départ le '+prettyDate(day.date)+' à 9 h et valider les dates de votre '+packageLabel()+'.'
             :slot.selectable
-            ?'Choisir l’arrivée le '+prettyDate(day.date)+' à 17 h. '+packageLabel()+' jusqu’au '+prettyDate(slot.departure)+' à 9 h. Forfait logement '+money(day.cents)+', ménage en supplément.'
+            ?'Choisir l’arrivée le '+prettyDate(day.date)+' à 17 h. Départs possibles : '+slot.departures.map(prettyDate).join(', ')+'. Minimum deux nuits.'
             :prettyDate(day.date)+' : '+label.textContent);
           cell.addEventListener('click',()=>{
             invalidate();
             const next=bookingDateChoice({arrival:arrival.value,departure:departure.value},day.date,packageField.value,days,today);
             arrival.value=next.arrival;departure.value=next.departure;updatePackage();
-            const focus=next.departure||bookingDateAfter(next.arrival,packageField.value==='midweek'?4:3);
+            const newStart=days.get(next.arrival),newSlot=newStart?bookingSlot(newStart,packageField.value,days,today):null;
+            const focus=next.departure||newSlot?.departures?.[0]||next.arrival;
             if(!next.departure){month=new Date(focus+'T12:00:00');month.setDate(1)}
             renderCalendar(focus);
           });
@@ -138,12 +148,12 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
       });
       calendarMessage.textContent=selection.arrival&&!selection.departure
         ?pendingSlot?.selectable
-          ?'Arrivée choisie. Cliquez sur le '+prettyDate(pendingSlot.departure)+' marqué « Départ » pour valider votre séjour.'
+            ?'Arrivée choisie. Choisissez un des départs marqués « Départ » (au moins 2 nuits).'
           :'Cette arrivée n’est plus disponible. Choisissez une nouvelle arrivée ou effacez les dates.'
         :selection.departure
           ?'Vos deux dates sont choisies. Elles sont affichées dans le récapitulatif du séjour.'
           :available
-            ?'Premier clic : choisissez '+(packageField.value==='midweek'?'un lundi':'un vendredi')+' d’arrivée. Second clic : validez le départ proposé.'
+            ?'Choisissez une arrivée puis un départ au choix, avec un minimum de 2 nuits dans la période indiquée.'
             :'Aucune arrivée disponible et tarifée ce mois-ci. Essayez le mois suivant ou l’autre forfait.';
       if(focusDate)calendar.querySelector('[data-date="'+focusDate+'"]')?.focus({preventScroll:true});
     } catch(error) {
@@ -165,7 +175,7 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
       if(current!==revision)return null;
       quote=data;result.replaceChildren();
       const total=document.createElement('p');total.className='quote-total';total.textContent=money(data.total_cents)+' pour votre '+data.package_label.toLowerCase();result.append(total);
-      const price=document.createElement('p');price.textContent='Logement entier : '+money(data.package_cents)+' + ménage : '+money(data.cleaning_cents)+'.';result.append(price);
+      const price=document.createElement('p');price.textContent='Logement entier : '+money(data.package_cents)+(data.package==='midweek'?' (tarif ajusté sur '+data.nights+' nuits, référence '+money(data.base_package_cents)+' pour 4 nuits)':' (tarif week-end fixe)')+' + ménage : '+money(data.cleaning_cents)+'.';result.append(price);
       const schedule=document.createElement('p');schedule.textContent=prettyDate(data.arrival)+' à 17 h → '+prettyDate(data.departure)+' à 9 h.';result.append(schedule);
       return data;
     } catch(error){if(current===revision){result.className='quote-details quote-error';result.textContent=error.message}return null}

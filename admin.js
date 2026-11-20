@@ -9,6 +9,7 @@
   const blockStart = element('block-start');
   const blockEnd = element('block-end');
   const localDate = value => new Intl.DateTimeFormat('fr-BE', {dateStyle:'long'}).format(new Date(value+'T12:00:00'));
+  function announce(message) {element(element('management').hidden?'admin-status':'erp-status').textContent=message}
   const now = new Date();
   const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   blockStart.min = today;
@@ -44,7 +45,7 @@
   element('clear-block').addEventListener('click',()=>{blockForm.reset();updateSelection();element('block-status').textContent='Sélection effacée. Choisissez une arrivée et un départ.'});
   async function api(path, data) {
     const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),12000);
+    const timeout=setTimeout(()=>controller.abort(),30000);
     try {
       const response=await fetch('/api/admin/'+path,{signal:controller.signal,method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
       if(response.status===401)throw Error('Clé refusée. Utilisez la clé affichée dans le Terminal pour '+location.host+'. Copiez uniquement la clé, sans le libellé.');
@@ -59,7 +60,7 @@
   function text(parent, tag, content) {const node=document.createElement(tag);node.textContent=content;parent.append(node);return node}
   function action(parent, label, callback) {
     const button=text(parent,'button',label);button.type='button';
-    button.addEventListener('click',async()=>{button.disabled=true;try{await callback()}catch(error){element('admin-status').textContent=error.message}finally{button.disabled=false}});
+    button.addEventListener('click',async()=>{button.disabled=true;try{await callback()}catch(error){announce(error.message)}finally{button.disabled=false}});
   }
   function record(parent, heading, description) {const node=document.createElement('article');node.className='admin-record';text(node,'h3',heading);text(node,'p',description);parent.append(node);const actions=document.createElement('div');actions.className='record-actions';node.append(actions);return actions}
   async function refresh() {
@@ -67,10 +68,10 @@
     const current=++generation;
     const [state,workspace]=await Promise.all([api('state?year='+year.value),api('workspace?year='+year.value)]);
     if(current!==generation || !token)return;
-    element('management').hidden=false;element('login').hidden=true;
-    element('admin-status').textContent='Données actualisées. Les montants sont prévisionnels, pas des encaissements.';
+    element('management').hidden=false;element('login').hidden=true;element('auth-shell').hidden=true;
+    announce('Données actualisées. Le prévisionnel concerne les demandes directes du site, pas les réservations externes.');
     element('metrics').replaceChildren();
-    [[money(state.forecast_cents),'Montant des séjours confirmés dans l’année, ménage inclus'],[state.confirmed_nights,'Nuits réservées'],[state.unpriced_nights,'Nuits libres sans tarif']].forEach(([value,label])=>{const box=document.createElement('div');text(box,'strong',value);text(box,'span',label);element('metrics').append(box)});
+    [[money(state.forecast_cents),'Prévisionnel des réservations directes'],[state.confirmed_nights,'Nuits occupées'],[state.unpriced_nights,'Dates tarifaires à compléter']].forEach(([value,label])=>{const box=document.createElement('div');text(box,'strong',value);text(box,'span',label);element('metrics').append(box)});
     element('admin-calendar').replaceChildren();
     for(let month=0;month<12;month++) {
       const section=document.createElement('section');section.className='calendar-month';
@@ -81,7 +82,7 @@
       for(let count=0;count<offset;count++)grid.append(document.createElement('span'));
       state.days.filter(day=>Number(day.date.slice(5,7))===month+1).forEach(day=>{
         const cell=text(grid,'button',Number(day.date.slice(8)));cell.type='button';cell.className='calendar-day';cell.dataset.state=day.state;cell.dataset.date=day.date;
-        cell.title=localDate(day.date)+' : '+({available:'disponible',occupied:'occupé',unpriced:'tarif manquant'}[day.state])+(day.cents===null?'':' / forfait '+(day.package==='midweek'?'mid-week':'week-end')+' '+money(day.cents));
+        cell.title=localDate(day.date)+' : '+({available:'disponible',occupied:'occupé',unpriced:'tarif manquant'}[day.state])+(day.cents===null?'':(day.package==='midweek'?' / référence mid-week (4 nuits) ':' / tarif week-end fixe ')+money(day.cents));
         cell.setAttribute('aria-label',cell.title+'. Choisir cette date.');cell.disabled=day.date<today;
         cell.addEventListener('click',()=>selectDate(day.date));
       });
@@ -96,18 +97,18 @@
   element('login').addEventListener('submit',async event=>{
     event.preventDefault();
     const trigger=event.currentTarget.querySelector('button');trigger.disabled=true;
-    element('admin-status').textContent='Connexion au backend…';
+    announce('Connexion au backend…');
     token=element('admin-token').value.trim().replace(/^Cl[ée]\s+propri[ée]taire\s*:\s*/i,'').trim();
     try {
       if(!window.NoyerWorkspace)throw Error('Le module de gestion n’a pas chargé. Arrêtez le serveur avec Ctrl+C, relancez python3 ~/le-noyer-v6/demarrer.py puis rechargez la page.');
       if(!workspaceReady){window.NoyerWorkspace.connect(api,refresh);workspaceReady=true}
-      await refresh();element('admin-token').value='';
-    }catch(error){token='';element('admin-status').textContent=error.message}
+      await refresh();element('admin-token').value='';element('page-title').focus({preventScroll:true});
+    }catch(error){token='';announce(error.message)}
     finally{trigger.disabled=false}
   });
-  element('logout').addEventListener('click',()=>{window.NoyerWorkspace?.clear();token='';generation++;element('management').hidden=true;element('login').hidden=false;['rates','blocks','requests','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());element('admin-status').textContent='Gestion fermée.'});
-  element('refresh').addEventListener('click',()=>refresh().catch(error=>element('admin-status').textContent=error.message));
-  year.addEventListener('change',()=>refresh().catch(error=>element('admin-status').textContent=error.message));
+  element('logout').addEventListener('click',()=>{window.NoyerWorkspace?.clear();token='';generation++;element('management').hidden=true;element('auth-shell').hidden=false;element('login').hidden=false;['rates','blocks','requests-platforms','requests-site','reception-list','cleaning-list','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());announce('Gestion fermée.')});
+  element('refresh').addEventListener('click',()=>refresh().catch(error=>announce(error.message)));
+  year.addEventListener('change',()=>refresh().catch(error=>announce(error.message)));
   function resetRate(){element('rate-form').reset();element('rate-form').elements.namedItem('id').value=0}
   element('new-rate').addEventListener('click',resetRate);
   [['rate-form','rates','rate-status'],['block-form','blocks','block-status']].forEach(([id,endpoint,statusId])=>{

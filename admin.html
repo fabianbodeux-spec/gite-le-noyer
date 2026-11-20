@@ -1,23 +1,125 @@
 <!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Le Noyer — Gestion des locations</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/site.css"><link rel="stylesheet" href="/booking.css"><link rel="stylesheet" href="/workspace.css"><script defer src="/workspace.js"></script><script defer src="/admin.js"></script></head>
-<body><header><a class="brand" href="/"><img src="/favicon.svg" width="49" height="49" alt=""><strong>Le Noyer</strong></a><a href="/">Voir le site</a></header>
-<main class="wrap admin-main"><h1>Vos locations.</h1><p>Planifiez les prix de l’année et confirmez les séjours. Une demande en attente ne bloque pas de dates.</p>
-<form id="login" class="admin-login"><label>Clé propriétaire (affichée dans Terminal au démarrage)<input id="admin-token" type="password" autocomplete="off" required></label><button class="btn">Ouvrir la gestion</button></form>
-<p id="admin-status" role="status" aria-live="polite"></p>
-<div id="management" hidden><div class="year-toolbar"><label>Année<input id="year" type="number" min="2000" max="2100" required></label><button class="btn" id="refresh" type="button">Actualiser</button><button class="btn" id="logout" type="button">Fermer la gestion</button></div>
-<nav class="admin-shortcuts" aria-label="Gestion des locations"><a href="#today-section">Aujourd’hui</a><a href="#requests-section">Dossiers</a><a href="#cleaning-section">Ménage</a><a href="#pricing-section">Tarifs</a><a href="#block-dates">Bloquer des dates</a></nav>
-<section id="today-section"><h2>Aujourd’hui</h2><p>Vos actions à traiter, toutes années confondues pour les demandes à venir.</p><div id="today-content" class="today-grid"></div></section>
-<div class="admin-metrics" id="metrics"></div>
-<section id="requests-section"><h2>Demandes et suivi des séjours</h2><p>Les imports sont des dossiers à vérifier. Aucune plateforme n’est connectée et aucun message n’est envoyé automatiquement.</p>
-<details id="new-inquiry" class="inquiry-import"><summary>Ajouter une demande externe ou par téléphone</summary><label>Coller un e-mail reçu<textarea id="email-content" rows="5" maxlength="12000" placeholder="Collez le message reçu de la plateforme…"></textarea></label><button type="button" id="extract-email" class="btn">Préremplir les informations</button><p id="import-feedback" class="workspace-feedback" role="status" aria-live="polite"></p>
-<form id="external-form" class="form-card"><input type="hidden" name="id" value=""><input type="hidden" name="version" value="0"><div class="form-row"><label>Origine<select name="source"><option value="ardennes-etape">Ardennes-étape</option><option value="villaforyou">Villa for You</option><option value="belvilla">Belvilla</option><option value="telephone">Téléphone</option><option value="autre" selected>Autre</option></select></label><label>Référence de la plateforme<input name="reference" maxlength="150"></label></div>
-<div class="form-row"><label>Nom du voyageur, si connu<input name="name" maxlength="100" autocomplete="off"></label><label>E-mail du voyageur, si connu<input type="email" name="email" maxlength="254" autocomplete="off" spellcheck="false"></label></div><div class="form-row"><label>Arrivée à 17 h<input name="arrival" type="date" required></label><label>Départ à 9 h<input name="departure" type="date" required></label></div><p>Mid-week : lundi–vendredi. Week-end : vendredi–lundi. Pour des dates différentes réservées ailleurs, utilisez un blocage manuel.</p><div class="form-row"><label>Voyageurs<input type="number" name="guests" min="1" max="30" required></label><label>Montant total du séjour (€), si connu<input type="number" name="total" step="0.01" min="0.01" max="100000"></label></div><label>Message reçu ou description<textarea name="message" rows="5" maxlength="12000"></textarea></label><p>Le total externe doit inclure les frais déjà prévus par la plateforme. Aucun supplément n’est ajouté par cet import. Un dossier incomplet reste en attente.</p><button type="submit" class="btn">Enregistrer le dossier à vérifier</button><button type="button" id="reset-external" class="underlink">Nouveau dossier</button></form></details>
-<div class="inquiry-filters"><label>Origine<select id="inquiry-source"><option value="all">Toutes les origines</option><option value="direct">Site Le Noyer</option><option value="ardennes-etape">Ardennes-étape</option><option value="villaforyou">Villa for You</option><option value="belvilla">Belvilla</option><option value="telephone">Téléphone</option><option value="autre">Autre</option></select></label><label>Statut<select id="inquiry-status"><option value="all">Tous les statuts</option><option value="pending">En attente</option><option value="confirmed">Confirmé</option><option value="rejected">Refusé</option><option value="cancelled">Annulé</option></select></label></div><div id="requests"></div></section>
-<section id="cleaning-section"><h2>Planning ménage</h2><p>Créé à partir des départs confirmés : intervention de 9 h à 17 h. Une annulation retire la rotation. La validation « maison prête » reste manuelle.</p><div id="cleaning-list"></div></section>
-<section id="block-dates" aria-labelledby="block-title"><h2 id="block-title">Ajouter des dates indisponibles</h2><p>Réservation par téléphone ou sur une autre plateforme, vacances personnelles, travaux : bloquez une période sans créer de demande de location. Aucun tarif n’est nécessaire.</p><form id="block-form" class="form-card"><div class="form-row"><label>Date d’arrivée<input type="date" name="start" id="block-start" required aria-describedby="block-help"></label><label>Date de départ<input type="date" name="end" id="block-end" required aria-describedby="block-help"></label></div><p id="block-help">Saisissez vos dates ou cliquez sur l’arrivée puis sur le départ dans le calendrier ci-dessous. La nuit du départ reste libre.</p><label>Motif privé<select name="reason" id="block-reason"><option>Réservation par téléphone</option><option>Réservation sur une autre plateforme</option><option>Séjour personnel</option><option>Travaux ou entretien</option><option>Autre indisponibilité</option></select></label><button type="submit" class="btn">Enregistrer l’indisponibilité</button><button id="clear-block" type="button" class="underlink">Effacer la sélection</button><p id="block-status" role="status" aria-live="polite"></p></form><h3>Vos périodes bloquées</h3><div id="blocks"></div></section><section aria-labelledby="calendar-title"><h2 id="calendar-title">Calendrier annuel</h2><p class="calendar-legend">Vert : disponible et tarifé · Gris : occupé · Pointillé : tarif à définir. Cliquez sur une date d’arrivée puis sur une date de départ pour remplir le formulaire de blocage. Les dates représentent des nuits.</p><div id="admin-calendar" class="year-calendar"></div></section>
-<div class="admin-columns admin-single"><section id="pricing-section"><h2>Votre grille tarifaire annuelle</h2><p id="rates-warning" class="workspace-warning"></p><p>Deux forfaits uniquement : mid-week du lundi 17 h au vendredi 9 h, week-end du vendredi 17 h au lundi 9 h. Indiquez le prix total de chaque forfait, jamais un prix à la nuit. La période est choisie selon la date d’arrivée ; sa fin est exclue. Le ménage est ajouté une seule fois. Les anciens tarifs à la nuit restent archivés et doivent être remplacés par vos vrais forfaits.</p>
-<form id="rate-form" class="form-card"><input type="hidden" name="id" value="0"><label>Nom de la période<input name="label" maxlength="100" required placeholder="Été, basse saison…"></label><div class="form-row"><label>Première nuit<input name="start" type="date" required></label><label>Fin exclue<input name="end" type="date" required></label></div><div class="form-row"><label>Forfait mid-week complet (€)<input name="midweek" type="number" min="0.01" step="0.01" max="100000" required></label><label>Forfait week-end complet (€)<input name="weekend" type="number" min="0.01" step="0.01" max="100000" required></label></div><div class="form-row"><label>Ménage par séjour (€)<input name="cleaning" type="number" min="0" step="0.01" max="100000" value="0" required></label></div><button class="btn">Enregistrer le tarif</button><button id="new-rate" type="button" class="underlink">Nouvelle période</button><p id="rate-status" role="status"></p></form><div class="workspace-toolbar"><button type="button" id="select-all-rates" class="btn">Sélectionner toutes les périodes</button></div><div id="rates" class="rates-scroll"></div>
-<form id="bulk-rates" class="bulk-form"><h3>Appliquer des prix à la sélection</h3><p>Les prix saisis remplacent ceux des périodes cochées. Les devis déjà enregistrés restent conservés.</p><div class="form-row"><label>Forfait mid-week complet (€)<input name="midweek" type="number" step="0.01" min="0.01" max="100000" required></label><label>Forfait week-end complet (€)<input name="weekend" type="number" step="0.01" min="0.01" max="100000" required></label><label>Ménage par séjour (€)<input name="cleaning" type="number" step="0.01" min="0" max="100000" required></label></div><button class="btn" type="submit">Appliquer aux périodes cochées</button><p id="bulk-status" role="status"></p></form></section>
-</div>
-</div></main><dialog id="message-draft" aria-labelledby="draft-title"><div class="dialog-head"><h2 id="draft-title">Réponse préparée</h2><button type="button" id="draft-close" aria-label="Fermer le brouillon">×</button></div><p id="draft-recipient"></p><label>Objet<input id="draft-subject"></label><label>Message à vérifier<textarea id="draft-body" rows="10"></textarea></label><button type="button" id="copy-draft" class="btn">Copier le brouillon</button><p id="draft-status" role="status" aria-live="polite"></p></dialog></body></html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f8f6ef">
+  <title>Gestion des locations — Le Noyer</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/site.css">
+  <link rel="stylesheet" href="/booking.css">
+  <link rel="stylesheet" href="/workspace.css">
+  <script defer src="/workspace.js"></script>
+  <script defer src="/admin.js"></script>
+</head>
+<body class="erp-body">
+  <a class="skip" href="#erp-content">Aller au contenu</a>
+  <div id="auth-shell" class="auth-shell">
+    <header class="auth-header"><a class="brand" href="/"><img src="/favicon.svg" width="44" height="44" alt=""><span><strong>Le Noyer</strong><small>Gestion des séjours</small></span></a><a href="/">Voir le site</a></header>
+    <main class="auth-main">
+      <span class="auth-kicker">Espace propriétaire</span>
+      <h1>La maison, bien organisée.</h1>
+      <p>Réservations, préparation des séjours et calendrier, réunis dans un seul espace.</p>
+      <form id="login" class="admin-login">
+        <label for="admin-token">Clé propriétaire<input id="admin-token" type="password" autocomplete="current-password" required></label>
+        <button class="btn">Ouvrir la gestion</button>
+      </form>
+      <p id="admin-status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+
+  <div id="management" class="erp-shell" hidden>
+    <aside id="erp-sidebar" class="erp-sidebar" aria-label="Navigation propriétaire">
+      <a class="erp-brand" href="#dashboard"><img src="/favicon.svg" width="42" height="42" alt=""><span><strong>Le Noyer</strong><small>Espace propriétaire</small></span></a>
+      <nav class="erp-nav">
+        <span class="nav-label">Maison</span>
+        <a href="#dashboard" data-erp-nav="dashboard"><span aria-hidden="true">⌂</span>Vue d’ensemble</a>
+        <a href="#reservations" data-erp-nav="reservations"><span aria-hidden="true">▤</span>Réservations externes</a>
+        <a href="#site-requests" data-erp-nav="site-requests"><span aria-hidden="true">✉</span>Demandes du site</a>
+        <a href="#cleaning" data-erp-nav="cleaning"><span aria-hidden="true">◷</span>Accueil & ménage</a>
+        <span class="nav-label nav-label-lower">Réglages</span>
+        <a href="#pricing" data-erp-nav="pricing"><span aria-hidden="true">€</span>Tarifs du site</a>
+        <a href="#availability" data-erp-nav="availability"><span aria-hidden="true">▦</span>Disponibilités</a>
+      </nav>
+      <div class="erp-sidebar-bottom"><a href="/">← Retour au site public</a><button id="logout" type="button" class="sidebar-logout">Fermer la gestion</button></div>
+    </aside>
+
+    <main id="erp-content" class="erp-main" tabindex="-1">
+      <header class="erp-topbar">
+        <div class="erp-title-wrap"><button id="mobile-menu" class="mobile-menu" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><div><p class="erp-eyebrow">LE NOYER · GESTION</p><h1 id="page-title" tabindex="-1">Vue d’ensemble</h1></div></div>
+        <div class="erp-controls"><label for="year">Année</label><input id="year" type="number" min="2000" max="2100" required><button class="btn btn-small" id="refresh" type="button">Actualiser</button></div>
+      </header>
+      <p id="erp-status" class="erp-status" role="status" aria-live="polite"></p>
+
+      <section id="dashboard-page" class="erp-page" data-erp-page="dashboard" aria-labelledby="page-title">
+        <p class="page-intro">Les prochaines actions pour garder la maison prête et le calendrier juste.</p>
+        <div class="admin-metrics" id="metrics"></div>
+        <div class="dashboard-heading"><div><h2>À suivre</h2><p>Demandes en attente, séjours proches et dates à vérifier.</p></div><span id="dashboard-date"></span></div>
+        <div id="today-content" class="dashboard-grid"></div>
+      </section>
+
+      <section id="reservations-page" class="erp-page" data-erp-page="reservations" aria-labelledby="page-title" hidden>
+        <div class="page-heading"><div><p class="page-intro">Valide les dates, prépare l’arrivée et le ménage. Le paiement et les échanges client restent gérés par la plateforme.</p></div><button type="button" id="add-platform-booking" class="btn">Ajouter une réservation</button></div>
+        <details id="new-inquiry" class="erp-form-panel">
+          <summary>Enregistrer une réservation reçue</summary>
+          <div class="import-tools"><label for="email-content">Coller le message de confirmation pour préremplir les champs<textarea id="email-content" rows="4" maxlength="12000" placeholder="Colle ici le message reçu…"></textarea></label><button type="button" id="extract-email" class="btn btn-outline">Préremplir les informations</button><p id="import-feedback" class="workspace-feedback" role="status" aria-live="polite"></p></div>
+          <form id="external-form" class="erp-form-grid">
+            <input type="hidden" name="id" value=""><input type="hidden" name="version" value="0">
+            <label>Plateforme<select name="source"><option value="ardennes-etape">Ardennes-étape</option><option value="villaforyou">Villa for You</option><option value="belvilla">Belvilla</option><option value="telephone">Téléphone</option><option value="autre" selected>Autre</option></select></label>
+            <label>Référence de réservation<input name="reference" maxlength="150" placeholder="Ex. référence de la plateforme…"></label>
+            <label>Nom du groupe, si connu<input name="name" maxlength="100" autocomplete="off"></label>
+            <label>Contact, si utile pour l’accueil<input type="email" name="email" maxlength="254" autocomplete="off" spellcheck="false"></label>
+            <label>Arrivée<input name="arrival" type="date" required></label>
+            <label>Départ<input name="departure" type="date" required></label>
+            <label>Nombre de voyageurs<input name="guests" type="number" min="1" max="30" required></label>
+            <label class="field-wide">Note ou extrait de confirmation<textarea name="message" rows="3" maxlength="12000"></textarea></label>
+            <p class="field-wide form-hint">Tu peux enregistrer des durées différentes des forfaits du site. Le dossier sert au calendrier, à l’accueil et au ménage.</p>
+            <div class="field-wide form-actions"><button type="submit" class="btn">Enregistrer pour validation</button><button type="button" id="reset-external" class="underlink">Effacer</button></div>
+          </form>
+        </details>
+        <div class="list-toolbar"><div><h2>Réservations</h2><p id="platform-count">Toutes les réservations externes enregistrées.</p></div><div class="list-filters"><label for="platform-source">Origine<select id="platform-source"><option value="all">Toutes les plateformes</option><option value="ardennes-etape">Ardennes-étape</option><option value="villaforyou">Villa for You</option><option value="belvilla">Belvilla</option><option value="telephone">Téléphone</option><option value="autre">Autre</option></select></label><label for="platform-status">Statut<select id="platform-status"><option value="all">Tous</option><option value="pending">À valider</option><option value="confirmed">Confirmées</option><option value="cancelled">Annulées</option><option value="rejected">Refusées</option></select></label><label for="platform-search">Recherche<input id="platform-search" type="search" placeholder="Nom ou référence…"></label></div></div>
+        <div id="requests-platforms" class="erp-record-list"></div>
+      </section>
+
+      <section id="site-requests-page" class="erp-page" data-erp-page="site-requests" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Les demandes reçues sur le site Le Noyer. Vérifie le devis et les dates avant de confirmer.</p>
+        <div class="list-toolbar"><div><h2>Demandes à traiter</h2><p>Les demandes en attente ne bloquent pas les dates.</p></div><div class="list-filters"><label for="site-status">Statut<select id="site-status"><option value="all">Tous</option><option value="pending">En attente</option><option value="confirmed">Confirmées</option><option value="rejected">Refusées</option><option value="cancelled">Annulées</option></select></label><label for="site-search">Recherche<input id="site-search" type="search" placeholder="Nom ou e-mail…"></label></div></div>
+        <div id="requests-site" class="erp-record-list"></div>
+      </section>
+
+      <section id="cleaning-page" class="erp-page" data-erp-page="cleaning" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Prépare l’arrivée des voyageurs et coordonne le ménage entre deux séjours.</p>
+        <div class="operations-switch"><div><span class="operation-mark reception-mark">A</span><div><h2>Arrivées à préparer</h2><p>Les séjours confirmés qui approchent.</p></div></div></div>
+        <div id="reception-list" class="erp-record-list"></div>
+        <div class="operations-switch cleaning-heading"><div><span class="operation-mark cleaning-mark">M</span><div><h2>Rotations ménage</h2><p>Départs de 9 h à 17 h, avec les arrivées le même jour.</p></div></div></div>
+        <div id="cleaning-list" class="erp-record-list"></div>
+      </section>
+
+      <section id="pricing-page" class="erp-page" data-erp-page="pricing" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Les tarifs du site public uniquement. Les plateformes externes gèrent leurs propres prix.</p>
+        <p id="rates-warning" class="workspace-warning"></p>
+        <div class="pricing-layout">
+          <section class="erp-subpanel"><h2>Ajouter une période</h2><p>Deux forfaits, selon la date d’arrivée. La période de fin est exclue.</p>
+            <form id="rate-form" class="form-card"><input type="hidden" name="id" value="0"><label>Nom de la période<input name="label" maxlength="100" required placeholder="Été, basse saison…"></label><div class="form-row"><label>Première date<input name="start" type="date" required></label><label>Fin exclue<input name="end" type="date" required></label></div><div class="form-row"><label>Tarif de référence mid-week (4 nuits) (€)<input name="midweek" type="number" min="0.01" step="0.01" max="100000" required></label><label>Tarif week-end unique (€)<input name="weekend" type="number" min="0.01" step="0.01" max="100000" required></label></div><label>Ménage par séjour (€)<input name="cleaning" type="number" min="0" step="0.01" max="100000" value="0" required></label><button class="btn">Enregistrer la période</button><button id="new-rate" type="button" class="underlink">Vider le formulaire</button><p id="rate-status" role="status" aria-live="polite"></p></form>
+          </section>
+          <section class="erp-subpanel"><div class="list-toolbar"><div><h2>Grille tarifaire</h2><p>Modifie ou copie une saison.</p></div><button type="button" id="select-all-rates" class="btn btn-outline">Tout sélectionner</button></div><div id="rates" class="rates-scroll"></div>
+            <form id="bulk-rates" class="bulk-form"><h3>Appliquer aux périodes cochées</h3><div class="form-row"><label>Référence mid-week, 4 nuits (€)<input name="midweek" type="number" step="0.01" min="0.01" max="100000" required></label><label>Week-end unique (€)<input name="weekend" type="number" step="0.01" min="0.01" max="100000" required></label><label>Ménage (€)<input name="cleaning" type="number" step="0.01" min="0" max="100000" required></label></div><button class="btn" type="submit">Appliquer les prix</button><p id="bulk-status" role="status" aria-live="polite"></p></form>
+          </section>
+        </div>
+      </section>
+
+      <section id="availability-page" class="erp-page" data-erp-page="availability" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Consulte l’année et bloque les périodes réservées ailleurs, personnelles ou en travaux.</p>
+        <div class="availability-layout">
+          <section class="erp-subpanel"><h2>Bloquer une période</h2><form id="block-form" class="form-card"><div class="form-row"><label>Date d’arrivée<input type="date" name="start" id="block-start" required aria-describedby="block-help"></label><label>Date de départ<input type="date" name="end" id="block-end" required aria-describedby="block-help"></label></div><p id="block-help">Saisis les dates ou clique sur le calendrier. La nuit du départ reste libre.</p><label>Motif privé<select name="reason" id="block-reason"><option>Réservation par téléphone</option><option>Réservation sur une autre plateforme</option><option>Séjour personnel</option><option>Travaux ou entretien</option><option>Autre indisponibilité</option></select></label><button type="submit" class="btn">Enregistrer le blocage</button><button id="clear-block" type="button" class="underlink">Effacer les dates</button><p id="block-status" role="status" aria-live="polite"></p></form><h3>Dates bloquées</h3><div id="blocks" class="erp-record-list"></div></section>
+          <section class="erp-subpanel"><h2>Calendrier annuel</h2><p class="calendar-legend">Vert : disponible et tarifé · Gris : occupé · Pointillé : tarif à définir. Choisis l’arrivée puis le départ pour préparer un blocage.</p><div id="admin-calendar" class="year-calendar"></div></section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="record-dialog" class="record-dialog" aria-labelledby="record-title"><div class="dialog-head"><div><p class="erp-eyebrow">ESPACE DE TRAVAIL · SÉJOUR</p><h2 id="record-title"></h2></div><button type="button" id="record-close" class="icon-close" aria-label="Fermer l’espace de séjour">×</button></div><div id="record-content"></div></dialog>
+  <dialog id="cleaning-share-dialog" class="cleaning-share-dialog" aria-labelledby="cleaning-share-title"><div class="dialog-head"><div><p class="erp-eyebrow">TRANSMISSION À L’ÉQUIPE</p><h2 id="cleaning-share-title">Consignes de ménage</h2></div><button type="button" id="cleaning-share-close" class="icon-close" aria-label="Fermer le partage">×</button></div><p class="share-explainer">Le message ne part pas depuis le site. Choisissez un canal, envoyez-le dans votre application, puis confirmez l’envoi pour garder une trace.</p><label for="cleaning-share-text">Aperçu du message</label><textarea id="cleaning-share-text" rows="10" spellcheck="true"></textarea><div class="record-actions"><button type="button" id="cleaning-share-whatsapp" class="btn btn-outline">Ouvrir WhatsApp</button><button type="button" id="cleaning-share-native" class="btn btn-outline">Partager…</button><button type="button" id="cleaning-share-copy" class="btn btn-outline">Copier le texte</button></div><p id="cleaning-share-status" role="status" aria-live="polite"></p><button type="button" id="confirm-cleaning-share" class="btn" disabled>Message envoyé, inscrire dans l’historique</button></dialog>
+  <dialog id="message-draft" aria-labelledby="draft-title"><div class="dialog-head"><h2 id="draft-title">Courriel à copier-coller</h2><button type="button" id="draft-close" class="icon-close" aria-label="Fermer le courriel préparé">×</button></div><p id="draft-recipient"></p><label>Objet<input id="draft-subject"></label><label>Message à vérifier<textarea id="draft-body" rows="10"></textarea></label><div class="record-actions"><button type="button" id="copy-draft" class="btn btn-outline">Copier le courriel</button><button type="button" id="mark-message-sent" class="btn" hidden>J’ai envoyé ce message, valider l’étape</button></div><p id="draft-status" role="status" aria-live="polite"></p></dialog>
+</body>
+</html>
