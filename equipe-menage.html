@@ -19,7 +19,7 @@
       <p id="login-status" class="status" role="status" aria-live="polite"></p>
     </section>
     <section id="planning" hidden>
-      <div class="plan-head"><div><p class="eyebrow">ESPACE ÉQUIPE</p><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="year">Année</label><input id="year" type="number" min="2000" max="2100"><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
+      <div class="plan-head"><div><p class="eyebrow">ESPACE ÉQUIPE</p><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="task-filter">Suivi<select id="task-filter"><option value="pending">À suivre</option><option value="all">Toutes les rotations</option><option value="transmit">À transmettre</option><option value="receipt">Réception à confirmer</option><option value="clean">Ménage à terminer</option><option value="done">Terminées</option></select></label><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
       <p id="plan-status" class="status" role="status" aria-live="polite"></p>
       <div id="tasks" class="task-list" aria-live="polite"></div>
     </section>

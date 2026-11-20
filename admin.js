@@ -49,8 +49,9 @@
     try {
       const response=await fetch('/api/admin/'+path,{signal:controller.signal,method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
       if(response.status===401)throw Error('Clé refusée. Utilisez la clé affichée dans le Terminal pour '+location.host+'. Copiez uniquement la clé, sans le libellé.');
-      if(response.status===404)throw Error('Le serveur actif utilise une ancienne version. Arrêtez-le avec Ctrl+C, relancez python3 ~/le-noyer-v6/demarrer.py puis rechargez cette page.');
-      const result=await response.json();if(!response.ok)throw Error(result.error || 'Réessayez.');return result;
+      const payload=await response.text();let result={};
+      try{result=payload?JSON.parse(payload):{}}catch{if(!response.ok)throw Error('Le serveur a répondu HTTP '+response.status+' sans message exploitable. Consultez les journaux Railway.');throw Error('Réponse du serveur illisible. Actualisez la page et consultez les journaux Railway.')}
+      if(!response.ok)throw Error(result.error || 'Erreur serveur HTTP '+response.status+'. Consultez les journaux Railway.');return result;
     } catch(error) {
       if(error.name==='AbortError')throw Error('Le serveur ne répond pas. Vérifiez le Terminal et l’adresse de gestion affichée au démarrage.');
       if(error instanceof TypeError)throw Error('Serveur inaccessible. Relancez le site puis utilisez exactement l’adresse Gestion affichée dans Terminal.');
@@ -118,7 +119,7 @@
       const data=Object.fromEntries(new FormData(form));
       try{
         await api(endpoint,data);form.reset();
-        if(endpoint==='rates')resetRate();
+        if(endpoint==='rates'){resetRate();year.value=data.start.slice(0,4)}
         else {year.value=data.start.slice(0,4);updateSelection()}
         element(statusId).textContent=endpoint==='blocks'?'Indisponibilité enregistrée du '+localDate(data.start)+' au '+localDate(data.end)+'. Ces nuits sont maintenant bloquées sur le site.':'Tarif enregistré.';
         await refresh();

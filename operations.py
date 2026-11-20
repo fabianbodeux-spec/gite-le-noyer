@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -281,8 +282,6 @@ class Operations:
                     cleaning_notifications.setdefault(event['booking_id'], set()).add(detail.get('departure'))
         cleaning = []
         for row in confirmed:
-            if not row['departure'].startswith(str(year)):
-                continue
             incoming = next((other for other in confirmed if other['arrival'] >= row['departure']), None)
             cleaning.append({'booking_id': row['id'], 'date': row['departure'], 'start': '09:00', 'deadline': '17:00',
                              'same_day_arrival': incoming['id'] if incoming and incoming['arrival']==row['departure'] else None,
@@ -297,15 +296,11 @@ class Operations:
                 'departures': [row['id'] for row in confirmed if row['departure'] == today],
                 'upcoming': [row['id'] for row in confirmed if today < row['arrival'] <= horizon],
                 'conflicts': [row['id'] for row in rows if row['conflict'] and row['departure'] > today],
-                'records': [row for row in rows if row['arrival'] < f'{year+1}-01-01' and row['departure'] > f'{year}-01-01'
-                            or row['status'] == 'pending' and row['departure'] > today
-                            or row['status'] == 'confirmed' and today <= row['departure'] and row['arrival'] <= horizon],
+                'records': rows,
                 'cleaning': cleaning}
 
-    def cleaning_workspace(self, year):
-        year = integer(year, 2000, 2100, 'Année')
+    def cleaning_workspace(self, year=None):
         today = date.today().isoformat()
-        start, end = f'{year}-01-01', f'{year+1}-01-01'
         with self.store.connection() as connection:
             bookings = [dict(row) for row in connection.execute('''SELECT demandes.id,demandes.name,demandes.arrival,demandes.departure,
                 demandes.guests,COALESCE(workflow.source,'direct') AS source,
@@ -313,12 +308,12 @@ class Operations:
                 COALESCE(workflow.arrival_time,'17:00') AS arrival_time,COALESCE(workflow.departure_time,'09:00') AS departure_time,
                 COALESCE(workflow.checklist,'{}') AS checklist,workflow.cleaning_received_at
                 FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
-                WHERE demandes.status='confirmed' AND demandes.departure >= ? AND demandes.departure < ?
-                ORDER BY demandes.departure,demandes.arrival,demandes.id''', (start, end))]
+                WHERE demandes.status='confirmed'
+                ORDER BY demandes.departure,demandes.arrival,demandes.id''')]
             arrivals = [dict(row) for row in connection.execute('''SELECT demandes.id,demandes.name,demandes.arrival,demandes.guests,
                 COALESCE(workflow.source,'direct') AS source,COALESCE(workflow.arrival_time,'17:00') AS arrival_time FROM demandes
                 LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
-                WHERE demandes.status='confirmed' AND demandes.arrival >= ? ORDER BY demandes.arrival,demandes.id''', (start,))]
+                WHERE demandes.status='confirmed' AND demandes.arrival >= ? ORDER BY demandes.arrival,demandes.id''', (today,))]
             notifications = {}
             for event in connection.execute("SELECT booking_id,details FROM booking_timeline WHERE event_type='cleaning_team_notified' ORDER BY id"):
                 detail = json.loads(event['details'])
@@ -328,8 +323,6 @@ class Operations:
             checklist = json.loads(row.pop('checklist'))
             task_date = row['departure']
             done = bool(checklist.get('cleaning_done', False))
-            if task_date < today and done:
-                continue
             incoming = next((candidate for candidate in arrivals if candidate['arrival'] >= task_date), None)
             tasks.append({'booking_id': row['id'], 'date': task_date, 'guest_name': row['name'] or 'Voyageurs',
                 'guest_count': row['guests'], 'arrival': row['arrival'], 'departure': row['departure'],
@@ -339,7 +332,7 @@ class Operations:
                 'requested': task_date in notifications.get(row['id'], set()),
                 'received': bool(row['cleaning_received_at']), 'received_at': row['cleaning_received_at'],
                 'done': done})
-        return {'year': year, 'today': today, 'tasks': tasks}
+        return {'today': today, 'tasks': tasks}
 
     def cleaning_task_update(self, identifier, action):
         if action not in ('received', 'complete'):
@@ -438,11 +431,17 @@ class Operations:
                         reservation_confirmed=True
         except sqlite3.IntegrityError:
             raise BookingError('Cette référence de paiement existe déjà pour ce séjour.',409)
-        email_draft=self.draft(identifier,'payment',payment_id)
+        email_draft=None
+        email_draft_error=None
+        try:
+            email_draft=self.draft(identifier,'payment',payment_id)
+        except Exception:
+            logging.exception('Paiement enregistré, mais le brouillon du courriel n’a pas été préparé (dossier %s)', identifier)
+            email_draft_error='Le paiement est enregistré. Le courriel devra être préparé séparément depuis le dossier.'
         return {'payment_id':payment_id,'amount_cents':amount,'paid_total_cents':total_paid,
                 'balance_cents':max(0,total-total_paid),'fully_paid':total_paid>=total,
                 'reservation_confirmed':reservation_confirmed,
-                'email_draft':email_draft}
+                'email_draft':email_draft,'email_draft_error':email_draft_error}
 
     def draft(self, identifier, kind, payment_id=None, record_prepared=True):
         with self.store.connection(True) as connection:

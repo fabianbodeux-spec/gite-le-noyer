@@ -47,6 +47,8 @@
 .form-hint,.share-explainer{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
 .record-followup label:not(:has(input)) textarea{line-height:1.5;resize:vertical}
 .cleaning-share-dialog{width:min(620px,calc(100vw - 36px));max-height:min(90dvh,850px);padding:0 22px 22px;border:1px solid var(--erp-border);border-top:3px solid var(--copper);background:var(--ivory);color:var(--ink)}
+.cleaning-toolbar{display:flex;justify-content:flex-end;margin:14px 0}.cleaning-toolbar label{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px}.cleaning-toolbar select{min-width:230px;min-height:42px;padding:8px 32px 8px 10px;border:1px solid var(--erp-border);border-radius:4px;background:#fff;color:var(--ink);font:inherit}
+@media(max-width:600px){.cleaning-toolbar{justify-content:stretch}.cleaning-toolbar label{width:100%;align-items:stretch;flex-direction:column;gap:5px}.cleaning-toolbar select{width:100%;min-width:0}}
 .cleaning-share-dialog::backdrop{background:#13251dcc;backdrop-filter:blur(2px)}
 .cleaning-share-dialog>.dialog-head{margin:0 -22px 15px;padding:16px 22px}
 .cleaning-share-dialog h2{font-size:24px}.cleaning-share-dialog>label{display:block;margin:16px 0 6px;font-size:13px;font-weight:650}

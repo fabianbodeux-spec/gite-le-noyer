@@ -127,7 +127,7 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     return self.respond(200, operations.workspace(params.get('year', [str(date.today().year)])[0]))
                 if url.path == '/api/cleaning/workspace':
                     self.authorize_cleaner()
-                    return self.respond(200, operations.cleaning_workspace(params.get('year', [str(date.today().year)])[0]))
+                    return self.respond(200, operations.cleaning_workspace())
                 if url.path in ('/api/availability', '/api/admin/state'):
                     private = url.path == '/api/admin/state'
                     if private:

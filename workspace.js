@@ -21,9 +21,14 @@
     if(className)node.className=className;parent.append(node);return node;
   }
   function notice(message) {element('erp-status').textContent=message;}
+  function reportActionError(error) {
+    const feedback=element('record-action-feedback');
+    if(feedback&&element('record-dialog').open){feedback.hidden=false;feedback.textContent=error.message}
+    else notice(error.message);
+  }
   function button(parent,label,callback,className='') {
     const node=text(parent,'button',label,className);node.type='button';
-    node.addEventListener('click',async()=>{node.disabled=true;try{await callback()}catch(error){notice(error.message)}finally{node.disabled=false}});
+    node.addEventListener('click',async()=>{node.disabled=true;const feedback=element('record-action-feedback');if(feedback)feedback.hidden=true;try{await callback()}catch(error){reportActionError(error)}finally{node.disabled=false}});
     return node;
   }
   function sentMessage(row,kind,paymentId=null) {
@@ -56,7 +61,7 @@
       const dot=document.createElement('span');dot.className='progress-dot';dot.setAttribute('aria-hidden','true');
       const copy=document.createElement('span');copy.className='progress-copy';text(copy,'strong',label);if(detail)text(copy,'small',detail);
       const state=text(action,'span',done?'Validé':'À valider','progress-state');action.append(dot,copy,state);
-      if(!done){action.addEventListener('click',async()=>{action.disabled=true;try{await activate()}catch(error){notice(error.message)}finally{action.disabled=false}});action.setAttribute('aria-label',label+' — à valider. Ouvrir cette étape.')}item.append(action);list.append(item);
+      if(!done){action.addEventListener('click',async()=>{action.disabled=true;const feedback=element('record-action-feedback');if(feedback)feedback.hidden=true;try{await activate()}catch(error){reportActionError(error)}finally{action.disabled=false}});action.setAttribute('aria-label',label+' — à valider. Ouvrir cette étape.')}item.append(action);list.append(item);
     };
     if(row.source==='direct'){
       const quoteSent=sentMessage(row,'quote'),hasPayments=(row.payments||[]).length>0;
@@ -149,7 +154,19 @@
       const methodLabel=text(fields,'label','Mode de paiement'),method=document.createElement('select');[['transfer','Virement bancaire'],['card','Carte'],['cash','Espèces'],['other','Autre']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;method.append(option)});methodLabel.append(method);
       const refLabel=text(fields,'label','Référence (facultatif)'),reference=document.createElement('input');reference.maxLength=150;refLabel.append(reference);fields.append(amountLabel,methodLabel,refLabel);form.append(fields);
       const save=text(form,'button','Valider le paiement');save.type='submit';save.className='btn';const status=text(form,'p','Après validation, le reçu et, si la réservation est confirmée, les informations d’arrivée seront préparés pour être copiés dans votre messagerie.');status.setAttribute('role','status');form.append(save,status);
-      form.addEventListener('submit',async event=>{event.preventDefault();if(!amount.reportValidity())return;save.disabled=true;try{const result=await api('requests/'+row.id+'/payment',{amount:amount.value,method:method.value,reference:reference.value,version:row.version});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);displayDraft(updated,'payment',result.email_draft,result.payment_id)}notice(result.reservation_confirmed?'Paiement validé et réservation confirmée. Le courriel est prêt à copier.':'Paiement enregistré. Le courriel est prêt à copier.')}catch(error){status.textContent=error.message}finally{save.disabled=false}});
+      form.addEventListener('submit',async event=>{
+        event.preventDefault();if(!amount.reportValidity())return;save.disabled=true;
+        let result;
+        try{result=await api('requests/'+row.id+'/payment',{amount:amount.value,method:method.value,reference:reference.value,version:row.version})}
+        catch(error){status.textContent='Paiement non enregistré : '+error.message;save.disabled=false;return}
+        status.textContent='Paiement enregistré. Actualisation du dossier…';
+        try{await refresh()}catch(error){status.textContent='Paiement enregistré, mais l’affichage n’a pas pu être actualisé. Cliquez sur Actualiser avant toute nouvelle saisie.';notice(error.message);save.disabled=false;return}
+        const updated=current.records.find(record=>record.id===row.id);
+        if(updated){showRecord(updated);if(result.email_draft)displayDraft(updated,'payment',result.email_draft,result.payment_id)}
+        if(result.email_draft_error)notice('Paiement enregistré. Le brouillon n’a pas été préparé : '+result.email_draft_error+' Vous pourrez le préparer depuis le dossier.');
+        else notice(result.reservation_confirmed?'Paiement validé et réservation confirmée. Le courriel est prêt à copier.':'Paiement enregistré. Le courriel est prêt à copier.');
+        save.disabled=false;
+      });
       panel.append(form);
     }
     parent.append(panel);
@@ -182,6 +199,7 @@
     const changed=activePage!==page;activePage=page;
     document.querySelectorAll('[data-erp-page]').forEach(panel=>{panel.hidden=panel.dataset.erpPage!==page});
     document.querySelectorAll('[data-erp-nav]').forEach(link=>{if(link.dataset.erpNav===page)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current')});
+    element('year').hidden=page==='cleaning';element('year').labels[0].hidden=page==='cleaning';
     element('page-title').textContent=titles[page];
     document.title=titles[page]+' — Le Noyer';
     element('erp-sidebar').classList.remove('is-open');element('mobile-menu').setAttribute('aria-expanded','false');
@@ -191,6 +209,7 @@
   function showRecord(row) {
     showPage(row.source==='direct'?'site-requests':'reservations',true);
     const dialog=element('record-dialog'),content=element('record-content');content.replaceChildren();
+    const actionFeedback=text(content,'p','');actionFeedback.id='record-action-feedback';actionFeedback.className='workspace-warning';actionFeedback.setAttribute('role','alert');actionFeedback.hidden=true;
     element('record-title').textContent=(row.name||sources[row.source]||'Séjour')+' · n° '+row.id;
     content.className='record-workspace';
     const grid=document.createElement('div');grid.className='record-workspace-grid';
@@ -213,7 +232,15 @@
     appendProgress(aside,row);
     const actions=document.createElement('div');actions.className='record-actions record-dialog-actions';aside.append(actions);
     if(row.source!=='direct'&&row.status==='pending'){const edit=button(actions,'Modifier les dates / informations',()=>editInquiry(row),'btn btn-outline');edit.id='record-edit-dates'}
-    if(row.status==='pending'&&row.confirmable&&!row.conflict){const confirmDates=button(actions,row.source==='direct'?'Confirmer la réservation':'Valider les dates',async()=>{await api('requests/'+row.id+'/status',{status:'confirmed'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'arrival')}notice(row.source==='direct'?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.')},'btn');confirmDates.id='record-confirm-dates'}
+    if(row.status==='pending'&&row.confirmable&&!row.conflict){const confirmDates=button(actions,row.source==='direct'?'Confirmer la réservation':'Valider les dates',async()=>{
+      await api('requests/'+row.id+'/status',{status:'confirmed'});
+      try{await refresh()}catch(error){reportActionError(new Error('Réservation confirmée, mais l’affichage n’a pas pu être actualisé. Cliquez sur Actualiser. '+error.message));return}
+      const updated=current.records.find(record=>record.id===row.id);
+      if(updated){showRecord(updated);if(row.source==='direct'){
+        try{await prepare(updated,'arrival')}catch(error){reportActionError(new Error('Réservation confirmée. Le courriel d’arrivée n’a pas été préparé : '+error.message));return}
+      }}
+      notice(row.source==='direct'?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.');
+    },'btn');confirmDates.id='record-confirm-dates'}
     if(row.status==='pending'&&row.source==='direct')button(actions,'Refuser la demande',async()=>{if(!window.confirm('Refuser cette demande du site ?'))return;await api('requests/'+row.id+'/status',{status:'rejected'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);await prepare(updated,'rejection')}},'btn btn-muted');
     if(row.status==='confirmed')button(actions,row.source==='direct'?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=row.source==='direct'?'Annuler cette réservation et libérer les dates ?':'Confirme que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'cancellation')}},'btn btn-muted');
     if(row.source==='direct'){
@@ -360,8 +387,16 @@
   }
   function renderCleaning() {
     const parent=element('cleaning-list');parent.replaceChildren();
-    const tasks=current.cleaning.filter(task=>task.date>=current.today||!task.done).sort((first,second)=>first.date.localeCompare(second.date));
-    if(!tasks.length){const empty=document.createElement('div');empty.className='empty-state';text(empty,'strong','Aucune rotation ménage à venir.');text(empty,'p','Les départs confirmés créeront automatiquement les rotations.');parent.append(empty);return}
+    const filter=element('cleaning-status').value;
+    const tasks=current.cleaning.filter(task=>{
+      if(filter==='all')return true;
+      if(filter==='transmit')return !task.done&&!task.requested;
+      if(filter==='receipt')return !task.done&&task.requested&&!task.received;
+      if(filter==='clean')return !task.done&&task.requested&&task.received;
+      if(filter==='done')return task.done;
+      return !task.done;
+    }).sort((first,second)=>first.date.localeCompare(second.date));
+    if(!tasks.length){const empty=document.createElement('div');empty.className='empty-state';text(empty,'strong','Aucune réservation dans cette étape.');text(empty,'p','Choisissez une autre étape dans la liste de suivi.');parent.append(empty);return}
     tasks.forEach(task=>{const row=current.records.find(record=>record.id===task.booking_id);if(!row)return;
       const card=document.createElement('article');card.className='operation-row';
       const date=document.createElement('div');date.className='operation-date';text(date,'strong',dateLabel(task.date));text(date,'span','9 h–17 h');card.append(date);
@@ -408,6 +443,7 @@
       window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'dashboard'));
       ['platform-status','platform-source','site-status'].forEach(id=>element(id).addEventListener('change',renderRecordLists));
       ['platform-search','site-search'].forEach(id=>element(id).addEventListener('input',renderRecordLists));
+      element('cleaning-status').addEventListener('change',renderCleaning);
       element('mobile-menu').addEventListener('click',event=>{const sidebar=element('erp-sidebar'),open=!sidebar.classList.contains('is-open');sidebar.classList.toggle('is-open',open);event.currentTarget.setAttribute('aria-expanded',String(open))});
       element('record-close').addEventListener('click',()=>element('record-dialog').close());
       element('record-dialog').addEventListener('click',event=>{if(event.target===element('record-dialog'))element('record-dialog').close()});
@@ -430,7 +466,18 @@
       element('select-all-rates').addEventListener('click',()=>{selectedRates=new Set(currentRates.map(rate=>rate.id));renderRates()});
       element('draft-close').addEventListener('click',()=>element('message-draft').close());
       element('copy-draft').addEventListener('click',async()=>{const validate=element('mark-message-sent');try{await navigator.clipboard.writeText('Objet : '+element('draft-subject').value+'\n\n'+element('draft-body').value);element('draft-status').textContent='Brouillon copié. Après l’avoir envoyé depuis votre messagerie, validez l’étape ci-dessous.';validate.disabled=false}catch{element('draft-status').textContent='Copie automatique indisponible. Sélectionnez et copiez le texte, puis vous pourrez valider son envoi.';validate.disabled=false}});
-      element('mark-message-sent').addEventListener('click',async event=>{const control=event.currentTarget;control.disabled=true;try{const kind=control.dataset.kind,paymentId=control.dataset.paymentId;const result=await api('requests/'+control.dataset.bookingId+'/message-sent',{kind,...(paymentId?{payment_id:Number(paymentId)}:{})});element('message-draft').close();await refresh();const updated=current.records.find(record=>record.id===Number(control.dataset.bookingId));if(updated)showRecord(updated);notice(result.sent?(kind==='payment'?'Courriel de paiement marqué comme envoyé et inscrit dans la progression.':'Envoi confirmé et inscrit dans l’historique.'):'L’envoi n’a pas été validé.')}catch(error){element('draft-status').textContent=error.message}finally{control.disabled=false}});
+      element('mark-message-sent').addEventListener('click',async event=>{
+        const control=event.currentTarget;control.disabled=true;
+        const kind=control.dataset.kind,paymentId=control.dataset.paymentId,id=Number(control.dataset.bookingId);
+        let result;
+        try{result=await api('requests/'+id+'/message-sent',{kind,...(paymentId?{payment_id:Number(paymentId)}:{})})}
+        catch(error){element('draft-status').textContent='L’envoi n’a pas été inscrit : '+error.message;control.disabled=false;return}
+        element('message-draft').close();
+        notice(result.sent?(kind==='payment'?'Courriel de paiement marqué comme envoyé et inscrit dans la progression.':'Envoi confirmé et inscrit dans l’historique.'):'L’envoi n’a pas été validé.');
+        try{await refresh();const updated=current.records.find(record=>record.id===id);if(updated)showRecord(updated)}
+        catch(error){notice('Envoi inscrit dans l’historique, mais l’affichage n’a pas pu être actualisé. Cliquez sur Actualiser. '+error.message)}
+        control.disabled=false;
+      });
       showPage(location.hash.slice(1)||'dashboard');
     },
     render,

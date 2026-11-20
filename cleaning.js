@@ -9,12 +9,21 @@
     const result=await response.json();if(!response.ok)throw Error(result.error||'La demande n’a pas abouti.');return result;
   }
   function fact(parent,label,value){const item=document.createElement('div');item.className='fact';const title=document.createElement('span');title.textContent=label;const content=document.createElement('strong');content.textContent=value;item.append(title,content);parent.append(item)}
+  function matchesFilter(task,filter){
+    if(filter==='all')return true;
+    if(filter==='transmit')return !task.done&&!task.requested;
+    if(filter==='receipt')return !task.done&&task.requested&&!task.received;
+    if(filter==='clean')return !task.done&&task.requested&&task.received;
+    if(filter==='done')return task.done;
+    return !task.done;
+  }
   async function refresh(){
     $('plan-status').textContent='Chargement du planning…';
     try{
-      const data=await request('/api/cleaning/workspace?year='+encodeURIComponent($('year').value));tasks.replaceChildren();$('today-label').textContent='Aujourd’hui : '+date(data.today);
-      if(!data.tasks.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Aucune rotation de ménage à afficher pour cette année.';tasks.append(empty)}
-      data.tasks.forEach(task=>{
+      const data=await request('/api/cleaning/workspace');tasks.replaceChildren();$('today-label').textContent='Aujourd’hui : '+date(data.today);
+      const visibleTasks=data.tasks.filter(task=>matchesFilter(task,$('task-filter').value));
+      if(!visibleTasks.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Aucune réservation dans cette étape. Choisissez une autre étape dans la liste de suivi.';tasks.append(empty)}
+      visibleTasks.forEach(task=>{
         const card=document.createElement('article');card.className='task'+(task.done?' done':'');
         const heading=document.createElement('div');heading.className='task-date';const title=document.createElement('strong');title.textContent=date(task.date)+' · '+time(task.checkout_time)+' à 17 h';const badge=document.createElement('span');badge.className='badge'+(task.done?' ok':'');badge.textContent=task.done?'Ménage terminé':task.received?'Demande reçue':task.requested?'À confirmer':'En attente de transmission';heading.append(title,badge);card.append(heading);
         const info=document.createElement('div');info.className='task-info';fact(info,'Séjour sortant',task.guest_name+' · '+task.guest_count+' voyageurs');fact(info,'Départ des voyageurs',date(task.departure)+' à '+time(task.checkout_time));card.append(info);
@@ -32,6 +41,6 @@
   }
   async function update(button,id,action){button.disabled=true;try{await request('/api/cleaning/tasks/'+id+'/'+action,{});await refresh()}catch(error){$('plan-status').textContent=error.message;button.disabled=false}}
   function logout(){accessKey='';keyInput.value='';planning.hidden=true;login.hidden=false;$('login-status').textContent='Accès fermé.'}
-  $('login-form').addEventListener('submit',async event=>{event.preventDefault();accessKey=keyInput.value.trim();$('login-status').textContent='Vérification de la clé…';$('year').value=new Date().getFullYear();try{await request('/api/cleaning/workspace?year='+$('year').value);login.hidden=true;planning.hidden=false;keyInput.value='';await refresh()}catch(error){accessKey='';$('login-status').textContent=error.message}});
-  $('refresh').addEventListener('click',refresh);$('year').addEventListener('change',refresh);$('logout').addEventListener('click',logout);
+  $('login-form').addEventListener('submit',async event=>{event.preventDefault();accessKey=keyInput.value.trim();$('login-status').textContent='Vérification de la clé…';try{await request('/api/cleaning/workspace');login.hidden=true;planning.hidden=false;keyInput.value='';await refresh()}catch(error){accessKey='';$('login-status').textContent=error.message}});
+  $('refresh').addEventListener('click',refresh);$('task-filter').addEventListener('change',refresh);$('logout').addEventListener('click',logout);
 })();
