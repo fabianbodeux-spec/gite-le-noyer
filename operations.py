@@ -346,6 +346,15 @@ class Operations:
             if kind == 'quote':
                 if row['status'] not in ('pending', 'confirmed') or not quote or quote.get('package') not in PACKAGES:
                     raise BookingError('Un devis au forfait est nécessaire pour préparer cette réponse.')
+                payment_received=connection.execute('SELECT 1 FROM booking_payments WHERE booking_id=? LIMIT 1',(identifier,)).fetchone()
+                sent_quote=any(json.loads(event['details']).get('kind')=='quote' for event in connection.execute(
+                    "SELECT details FROM booking_timeline WHERE booking_id=? AND event_type='message_sent_manually'",(identifier,)))
+                legacy_sent=connection.execute('''SELECT 1 FROM booking_timeline WHERE booking_id=?
+                    AND event_type IN ('quote_marked_sent_manually','quote_email_sent') LIMIT 1''',(identifier,)).fetchone()
+                if payment_received:
+                    raise BookingError('Un paiement est déjà enregistré : le devis est clôturé.',409)
+                if sent_quote or legacy_sent:
+                    raise BookingError('Ce devis a déjà été envoyé. Consultez la progression du dossier.',409)
                 if row['status'] == 'pending' and self.store.unavailable(connection, row['arrival'], row['departure'], identifier):
                     raise BookingError('Dates occupées : ne proposez pas ce devis.', 409)
                 amount = f"{row['total_cents']/100:.2f}".replace('.', ',')
@@ -367,12 +376,15 @@ class Operations:
                 body=f"Nous vous confirmons la réception de votre paiement de {amount} € pour le séjour {quote['package_label']} de {nights} nuits {schedule}.\n"
                 body+=f"Montant reçu à ce jour : {received} €.\n"
                 body+=('Le montant du séjour est intégralement réglé. ' if balance==0 else f"Solde restant : {balance/100:.2f} €. ".replace('.',',') )
-                if row['status']=='confirmed':
+                if row['status']=='confirmed' and balance==0:
                     body+='Votre réservation est confirmée.\n'
                     body+=f"Informations d’arrivée : accueil à 17 h, départ à 9 h.\nAdresse : Rue Bierleux 69A, 4990 Lierneux, Belgique.\nMerci de nous communiquer votre heure d’arrivée prévue afin d’organiser la remise des clés."
                     subject='Réservation confirmée et paiement reçu — Le Noyer'
                     includes_confirmation=True
                     includes_arrival=True
+                elif row['status']=='confirmed':
+                    body+='Votre réservation reste confirmée. Nous vous transmettrons les informations d’arrivée dans le courriel de confirmation du règlement intégral.'
+                    subject='Confirmation de réception de paiement — Le Noyer'
                 else:
                     body+='Les dates restent en attente de confirmation du propriétaire.'
                     subject='Confirmation de réception de votre paiement — Le Noyer'

@@ -26,17 +26,100 @@
     node.addEventListener('click',async()=>{node.disabled=true;try{await callback()}catch(error){notice(error.message)}finally{node.disabled=false}});
     return node;
   }
+  function sentMessage(row,kind,paymentId=null) {
+    const events=row.timeline||[];
+    if(events.some(event=>event.event_type==='message_sent_manually'&&event.details?.kind===kind&&
+      (kind!=='payment'||Number(event.details?.payment_id)===Number(paymentId))))return true;
+    const legacy={quote:['quote_marked_sent_manually','quote_email_sent'],followup:['followup_marked_sent_manually','followup_email_sent'],payment:['payment_email_sent'],arrival:['arrival_information_sent_manually','arrival_information_email_sent']};
+    return (legacy[kind]||[]).some(type=>events.some(event=>event.event_type===type&&
+      (kind!=='payment'||Number(event.details?.payment_id)===Number(paymentId))));
+  }
+  function combinedPaymentMessage(row,paymentId) {
+    return (row.timeline||[]).some(event=>event.event_type==='message_sent_manually'&&event.details?.kind==='payment'&&
+      Number(event.details?.payment_id)===Number(paymentId)&&event.details?.includes_confirmation&&event.details?.includes_arrival);
+  }
+  function focusWorkspace(selector) {
+    const target=element('record-dialog').querySelector(selector);
+    if(!target)return false;
+    target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
+    target.focus({preventScroll:true});
+    return true;
+  }
+  function appendProgress(parent,row) {
+    const panel=document.createElement('section');panel.className='progress-panel';
+    const heading=document.createElement('div');heading.className='progress-heading';
+    text(heading,'h3','Progression du dossier');
+    const list=document.createElement('ol');list.className='progress-list';
+    const add=(label,done,activate,detail='')=>{
+      const item=document.createElement('li');
+      const action=text(item,done?'div':'button','',`progress-step ${done?'is-complete':'is-pending'}`);if(!done)action.type='button';
+      const dot=document.createElement('span');dot.className='progress-dot';dot.setAttribute('aria-hidden','true');
+      const copy=document.createElement('span');copy.className='progress-copy';text(copy,'strong',label);if(detail)text(copy,'small',detail);
+      const state=text(action,'span',done?'Validé':'À valider','progress-state');action.append(dot,copy,state);
+      if(!done){action.addEventListener('click',async()=>{action.disabled=true;try{await activate()}catch(error){notice(error.message)}finally{action.disabled=false}});action.setAttribute('aria-label',label+' — à valider. Ouvrir cette étape.')}item.append(action);list.append(item);
+    };
+    if(row.source==='direct'){
+      const quoteSent=sentMessage(row,'quote'),hasPayments=(row.payments||[]).length>0;
+      if(row.package||row.has_quote){
+        add(quoteSent?'Devis envoyé':hasPayments?'Devis clôturé':'Devis à préparer',quoteSent||hasPayments,
+          ()=>{if(!quoteSent&&!hasPayments)prepare(row,'quote');else focusWorkspace('#quote-action')},
+          quoteSent?'Copie confirmée dans votre messagerie':hasPayments?'Un paiement est déjà enregistré':'Préparez puis envoyez votre proposition');
+      }
+      if(row.has_quote){
+        const fullyPaid=Number(row.balance_cents||0)<=0;
+        add(fullyPaid?'Paiement intégral réceptionné':Number(row.paid_cents||0)>0?'Solde à enregistrer':'Paiement à enregistrer',fullyPaid,
+          ()=>focusWorkspace('#payment-amount'),fullyPaid?'Règlement complet saisi':'À rapprocher avec le relevé bancaire');
+        const payments=row.payments||[];
+        const settlementEvent=(row.timeline||[]).find(event=>event.event_type==='payment_validated'&&
+          (event.details?.fully_paid||Number(event.details?.balance_cents)===0));
+        const settlementPayment=settlementEvent?payments.find(payment=>Number(payment.id)===Number(settlementEvent.details?.payment_id)):null;
+        const combinedEmail=fullyPaid&&row.status==='confirmed'&&settlementPayment;
+        payments.filter(payment=>!combinedEmail||Number(payment.id)!==Number(settlementPayment.id)).forEach(payment=>{
+          const receiptSent=payment.message_sent||sentMessage(row,'payment',payment.id);
+          add(receiptSent?'Courriel de paiement envoyé':'Courriel de paiement à envoyer',receiptSent,
+            ()=>prepare(row,'payment',payment.id),money(payment.amount_cents)+' · '+dateLabel(String(payment.verified_at).slice(0,10)));
+        });
+        const confirmationSent=(row.timeline||[]).some(event=>['reservation_confirmation_sent_manually','reservation_confirmation_email_sent'].includes(event.event_type));
+        const arrivalSent=(row.timeline||[]).some(event=>['arrival_information_sent_manually','arrival_information_email_sent'].includes(event.event_type));
+        if(combinedEmail){
+          const paymentEmailSent=(settlementPayment.message_sent||sentMessage(row,'payment',settlementPayment.id))&&confirmationSent&&arrivalSent;
+          add(paymentEmailSent?'Confirmation de paiement et réservation envoyée':'Confirmation de paiement et réservation à envoyer',paymentEmailSent,
+            ()=>prepare(row,'payment',settlementPayment.id),paymentEmailSent?'Un seul courriel confirmé':'Un seul courriel regroupe paiement, réservation et arrivée');
+        }
+        if(row.status==='confirmed'){
+          if(!combinedEmail){
+            const confirmationAndArrivalSent=confirmationSent&&arrivalSent;
+            add(confirmationAndArrivalSent?'Confirmation et informations d’arrivée envoyées':'Confirmation et informations d’arrivée à envoyer',confirmationAndArrivalSent,
+              ()=>prepare(row,'arrival'),confirmationAndArrivalSent?'Un seul courriel confirmé':'Préparez le message de confirmation et d’arrivée');
+          }
+          [['access_sent','Informations d’accès à transmettre'],['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>
+            add(label,Boolean(row.checklist?.[key]),()=>focusWorkspace('#workflow-flag-'+key)));
+        }
+      }
+    } else {
+      if(row.status==='pending')add('Dates à valider',false,()=>{if(!focusWorkspace('#record-confirm-dates')&&!focusWorkspace('#record-conflict'))focusWorkspace('#record-edit-dates')},'Vérifiez les dates et les chevauchements');
+      if(row.status==='confirmed'){
+        [['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>
+          add(label,Boolean(row.checklist?.[key]),()=>focusWorkspace('#workflow-flag-'+key)));
+      }
+    }
+    if(!list.children.length)text(panel,'p','Aucune étape à valider pour ce dossier.','progress-empty');
+    else panel.append(heading,list);
+    parent.append(panel);
+  }
   const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Consignes transmises à l’équipe ménage'};
   function appendTimeline(parent,row) {
     const section=document.createElement('section');section.className='event-timeline';text(section,'h3','Historique du dossier');
     const list=document.createElement('ol');
     [...(row.timeline||[])].reverse().forEach(event=>{
+      if(event.event_type==='message_prepared'&&sentMessage(row,event.details?.kind,event.details?.payment_id))return;
+      if(['reservation_confirmation_sent_manually','arrival_information_sent_manually'].includes(event.event_type)&&combinedPaymentMessage(row,event.details?.payment_id))return;
       const item=document.createElement('li');item.className=event.event_type==='email_send_failed'?'timeline-error':'';
       const head=document.createElement('div');head.className='timeline-head';
       let when=event.created_at;try{when=new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(event.created_at))}catch{}
       const detail=event.details||{};let description='';
       const messageNames={quote:'Devis',followup:'Relance',payment:'Courriel de paiement',arrival:'Informations d’arrivée',unavailable:'Réponse d’indisponibilité',rejection:'Réponse de refus',cancellation:'Confirmation d’annulation'};
-      const title=event.event_type==='message_prepared'?(messageNames[detail.kind]||'Message')+' préparé (brouillon)':event.event_type==='message_sent_manually'?(messageNames[detail.kind]||'Message')+' envoyé après copie':event.event_type==='email_send_failed'?'Ancien essai automatique non envoyé — mode manuel actif':eventLabels[event.event_type]||event.event_type.replaceAll('_',' ');
+      const title=event.event_type==='message_prepared'?(messageNames[detail.kind]||'Message')+' à envoyer':event.event_type==='message_sent_manually'&&detail.kind==='payment'&&detail.includes_confirmation&&detail.includes_arrival?'Courriel unique : paiement, réservation et arrivée envoyé':event.event_type==='message_sent_manually'?(messageNames[detail.kind]||'Message')+' envoyé':event.event_type==='email_send_failed'?'Ancien essai automatique non envoyé — mode manuel actif':eventLabels[event.event_type]||event.event_type.replaceAll('_',' ');
       text(head,'strong',title);text(head,'time',when);
       if(event.event_type==='history_tracking_started')description='L’historique antérieur n’est pas disponible. Statut actuel : '+(statuses[detail.existing_status]||detail.existing_status||'inconnu')+'.';
       else if(event.event_type==='payment_validated')description=money(detail.amount_cents)+' · '+({transfer:'Virement bancaire',card:'Carte',cash:'Espèces',other:'Autre'}[detail.method]||'')+(detail.reference?' · Réf. '+detail.reference:'')+(detail.fully_paid?' · Solde réglé':' · Reste '+money(detail.balance_cents));
@@ -54,10 +137,10 @@
   function appendPayments(parent,row) {
     const panel=document.createElement('section');panel.className='payment-panel';text(panel,'h3','Paiements');
     text(panel,'p','Reçu : '+money(row.paid_cents)+' · Solde : '+money(row.balance_cents),'payment-summary');
-    const list=document.createElement('ul');(row.payments||[]).forEach(payment=>{const item=document.createElement('li');let when=payment.verified_at;try{when=new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium'}).format(new Date(payment.verified_at))}catch{};text(item,'span',money(payment.amount_cents)+' · '+when+' · '+({transfer:'Virement',card:'Carte',cash:'Espèces',other:'Autre'}[payment.method]||payment.method));if(payment.reference)text(item,'span','Réf. '+payment.reference);if(!payment.message_sent)button(item,'Préparer le courriel',()=>prepare(row,'payment',payment.id),'btn btn-outline');list.append(item)});if(list.children.length)panel.append(list);
+    const list=document.createElement('ul');(row.payments||[]).forEach(payment=>{const item=document.createElement('li');let when=payment.verified_at;try{when=new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium'}).format(new Date(payment.verified_at))}catch{};text(item,'span',money(payment.amount_cents)+' · '+when+' · '+({transfer:'Virement',card:'Carte',cash:'Espèces',other:'Autre'}[payment.method]||payment.method));if(payment.reference)text(item,'span','Réf. '+payment.reference);if(!payment.message_sent&&!sentMessage(row,'payment',payment.id))button(item,'Préparer le courriel',()=>prepare(row,'payment',payment.id),'btn btn-outline');list.append(item)});if(list.children.length)panel.append(list);
     if(row.has_quote&&row.email&&row.status!=='cancelled'&&row.status!=='rejected'&&row.balance_cents>0){
-      const form=document.createElement('form');form.className='payment-form';const fields=document.createElement('div');fields.className='payment-fields';
-      const amountLabel=text(fields,'label','Montant reçu (€)'),amount=document.createElement('input');amount.type='number';amount.min='0.01';amount.max=(row.balance_cents/100).toFixed(2);amount.step='0.01';amount.required=true;amount.inputMode='decimal';amountLabel.append(amount);
+      const form=document.createElement('form');form.className='payment-form';form.id='payment-form';const fields=document.createElement('div');fields.className='payment-fields';
+      const amountLabel=text(fields,'label','Montant reçu (€)'),amount=document.createElement('input');amount.id='payment-amount';amount.type='number';amount.min='0.01';amount.max=(row.balance_cents/100).toFixed(2);amount.step='0.01';amount.required=true;amount.inputMode='decimal';amountLabel.append(amount);
       const methodLabel=text(fields,'label','Mode de paiement'),method=document.createElement('select');[['transfer','Virement bancaire'],['card','Carte'],['cash','Espèces'],['other','Autre']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;method.append(option)});methodLabel.append(method);
       const refLabel=text(fields,'label','Référence (facultatif)'),reference=document.createElement('input');reference.maxLength=150;refLabel.append(reference);fields.append(amountLabel,methodLabel,refLabel);form.append(fields);
       const save=text(form,'button','Valider le paiement');save.type='submit';save.className='btn';const status=text(form,'p','Après validation, le reçu et, si la réservation est confirmée, les informations d’arrivée seront préparés pour être copiés dans votre messagerie.');status.setAttribute('role','status');form.append(save,status);
@@ -120,16 +203,21 @@
     ];
     facts.forEach(([label,value])=>{const item=document.createElement('div');item.className='record-fact';text(item,'span',label);text(item,'strong',value);summary.append(item)});
     reading.append(status,summary);
-    if(row.conflict)text(reading,'p','Ces dates chevauchent une autre réservation ou un blocage. Vérifie le calendrier avant de valider.','workspace-warning record-alert');
+    if(row.conflict){const warning=text(reading,'p','Ces dates chevauchent une autre réservation ou un blocage. Vérifie le calendrier avant de valider.','workspace-warning record-alert');warning.id='record-conflict'}
     if(row.message){const original=document.createElement('details');original.className='record-source-message';text(original,'summary',row.source==='direct'?'Message du client':'Note / message de la plateforme');text(original,'p',row.message,'original-message');reading.append(original)}
+    appendProgress(aside,row);
     const actions=document.createElement('div');actions.className='record-actions record-dialog-actions';aside.append(actions);
-    if(row.source!=='direct'&&row.status==='pending')button(actions,'Modifier les dates / informations',()=>editInquiry(row),'btn btn-outline');
-    if(row.status==='pending'&&row.confirmable&&!row.conflict)button(actions,row.source==='direct'?'Confirmer la réservation':'Valider les dates',async()=>{await api('requests/'+row.id+'/status',{status:'confirmed'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'arrival')}notice(row.source==='direct'?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.')},'btn');
+    if(row.source!=='direct'&&row.status==='pending'){const edit=button(actions,'Modifier les dates / informations',()=>editInquiry(row),'btn btn-outline');edit.id='record-edit-dates'}
+    if(row.status==='pending'&&row.confirmable&&!row.conflict){const confirmDates=button(actions,row.source==='direct'?'Confirmer la réservation':'Valider les dates',async()=>{await api('requests/'+row.id+'/status',{status:'confirmed'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'arrival')}notice(row.source==='direct'?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.')},'btn');confirmDates.id='record-confirm-dates'}
     if(row.status==='pending'&&row.source==='direct')button(actions,'Refuser la demande',async()=>{if(!window.confirm('Refuser cette demande du site ?'))return;await api('requests/'+row.id+'/status',{status:'rejected'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);await prepare(updated,'rejection')}},'btn btn-muted');
     if(row.status==='confirmed')button(actions,row.source==='direct'?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=row.source==='direct'?'Annuler cette réservation et libérer les dates ?':'Confirme que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'cancellation')}},'btn btn-muted');
     if(row.source==='direct'){
       const drafts=document.createElement('div');drafts.className='record-actions record-draft-actions';aside.append(drafts);
-      if(row.package&&['pending','confirmed'].includes(row.status)&&!row.conflict)button(drafts,'Préparer le devis',()=>prepare(row,'quote'),'btn btn-outline');
+      if(row.package&&['pending','confirmed'].includes(row.status)&&!row.conflict){
+        const quoteSent=sentMessage(row,'quote'),paymentReceived=(row.payments||[]).length>0;
+        const quoteAction=button(drafts,quoteSent?'Devis déjà envoyé':paymentReceived?'Paiement reçu — devis clôturé':'Préparer le devis',()=>prepare(row,'quote'),'btn btn-outline');
+        quoteAction.id='quote-action';quoteAction.disabled=quoteSent||paymentReceived;
+      }
       if(row.status==='pending'){
         button(drafts,'Préparer une relance',()=>prepare(row,'followup'),'btn btn-outline');
       }
@@ -143,7 +231,7 @@
     if(row.source==='direct')text(form,'p','Coordonnées '+(row.name&&row.email?'complètes':'à compléter')+' · Devis '+(row.has_quote?'préparé':'à compléter')+' · '+statusLabel(row));
     else text(form,'p',row.status==='confirmed'?'Cochez les étapes lorsqu’elles sont prêtes. Le suivi commercial reste géré par la plateforme.':'Validez les dates après avoir vérifié les chevauchements.');
     const flags=row.source==='direct'?directFlags:externalFlags;
-    Object.entries(flags).forEach(([key,label])=>{const wrapper=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.name=key;input.checked=Boolean(row.checklist[key]);wrapper.append(input,document.createTextNode(label));form.append(wrapper)});
+    form.id='workflow-form';Object.entries(flags).forEach(([key,label])=>{const wrapper=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.id='workflow-flag-'+key;input.name=key;input.checked=Boolean(row.checklist[key]);wrapper.append(input,document.createTextNode(label));form.append(wrapper)});
     const noteLabel=document.createElement('label');noteLabel.textContent='Note privée pour l’équipe';const notes=document.createElement('textarea');notes.name='notes';notes.rows=3;notes.maxLength=4000;notes.value=row.notes;noteLabel.append(notes);form.append(noteLabel);
     if(row.status==='confirmed'){
       const cleaningLabel=document.createElement('label');cleaningLabel.textContent='Consignes destinées à l’équipe de nettoyage';const cleaningNote=document.createElement('textarea');cleaningNote.name='cleaning_note';cleaningNote.rows=4;cleaningNote.maxLength=2000;cleaningNote.value=row.cleaning_note||'';cleaningNote.placeholder='Ex. attention au poêle, linge à laisser dans le local…';cleaningLabel.append(cleaningNote);form.append(cleaningLabel);
@@ -332,7 +420,7 @@
       element('select-all-rates').addEventListener('click',()=>{selectedRates=new Set(currentRates.map(rate=>rate.id));renderRates()});
       element('draft-close').addEventListener('click',()=>element('message-draft').close());
       element('copy-draft').addEventListener('click',async()=>{const validate=element('mark-message-sent');try{await navigator.clipboard.writeText('Objet : '+element('draft-subject').value+'\n\n'+element('draft-body').value);element('draft-status').textContent='Brouillon copié. Après l’avoir envoyé depuis votre messagerie, validez l’étape ci-dessous.';validate.disabled=false}catch{element('draft-status').textContent='Copie automatique indisponible. Sélectionnez et copiez le texte, puis vous pourrez valider son envoi.';validate.disabled=false}});
-      element('mark-message-sent').addEventListener('click',async event=>{const control=event.currentTarget;control.disabled=true;try{const kind=control.dataset.kind,paymentId=control.dataset.paymentId;const result=await api('requests/'+control.dataset.bookingId+'/message-sent',{kind,...(paymentId?{payment_id:Number(paymentId)}:{})});element('message-draft').close();await refresh();const updated=current.records.find(record=>record.id===Number(control.dataset.bookingId));if(updated)showRecord(updated);notice(result.sent?'Envoi confirmé et inscrit dans l’historique.':'L’envoi n’a pas été validé.')}catch(error){element('draft-status').textContent=error.message}finally{control.disabled=false}});
+      element('mark-message-sent').addEventListener('click',async event=>{const control=event.currentTarget;control.disabled=true;try{const kind=control.dataset.kind,paymentId=control.dataset.paymentId;const result=await api('requests/'+control.dataset.bookingId+'/message-sent',{kind,...(paymentId?{payment_id:Number(paymentId)}:{})});element('message-draft').close();await refresh();const updated=current.records.find(record=>record.id===Number(control.dataset.bookingId));if(updated)showRecord(updated);notice(result.sent?(kind==='payment'?'Courriel de paiement marqué comme envoyé et inscrit dans la progression.':'Envoi confirmé et inscrit dans l’historique.'):'L’envoi n’a pas été validé.')}catch(error){element('draft-status').textContent=error.message}finally{control.disabled=false}});
       showPage(location.hash.slice(1)||'dashboard');
     },
     render,
