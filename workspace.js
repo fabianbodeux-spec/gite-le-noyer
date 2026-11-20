@@ -92,8 +92,11 @@
             add(confirmationAndArrivalSent?'Confirmation et informations d’arrivée envoyées':'Confirmation et informations d’arrivée à envoyer',confirmationAndArrivalSent,
               ()=>prepare(row,'arrival'),confirmationAndArrivalSent?'Un seul courriel confirmé':'Préparez le message de confirmation et d’arrivée');
           }
-          [['access_sent','Informations d’accès à transmettre'],['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>
-            add(label,Boolean(row.checklist?.[key]),()=>focusWorkspace('#workflow-flag-'+key)));
+          [['access_sent','Informations d’accès à transmettre'],['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>{
+            const complete=key==='access_sent'?(Boolean(row.checklist?.[key])||arrivalSent):Boolean(row.checklist?.[key]);
+            const stepLabel=key==='access_sent'&&complete?'Informations d’accès envoyées':label;
+            add(stepLabel,complete,key==='access_sent'?()=>prepare(row,'arrival'):()=>focusWorkspace('#workflow-flag-'+key));
+          });
         }
       }
     } else {
@@ -107,7 +110,7 @@
     else panel.append(heading,list);
     parent.append(panel);
   }
-  const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Consignes transmises à l’équipe ménage'};
+  const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Demande transmise à l’équipe ménage',cleaning_request_received:'Demande de ménage reçue par l’équipe',cleaning_completed_by_team:'Ménage terminé — équipe',arrival_time_updated:'Heure d’arrivée actualisée',departure_time_updated:'Heure de départ actualisée'};
   function appendTimeline(parent,row) {
     const section=document.createElement('section');section.className='event-timeline';text(section,'h3','Historique du dossier');
     const list=document.createElement('ol');
@@ -128,6 +131,8 @@
       else if(event.event_type==='message_prepared'&&detail.kind==='followup')description=detail.subject||'';
       else if(event.event_type==='checklist_step_updated')description=(directFlags[detail.step]||externalFlags[detail.step]||detail.step)+': '+(detail.completed?'terminé':'à refaire');
       else if(event.event_type==='cleaning_team_notified')description='Départ du '+(detail.departure?dateLabel(detail.departure):'séjour')+' · '+({whatsapp:'WhatsApp',share:'menu de partage',copy:'copie manuelle'}[detail.channel]||'canal non précisé')+'. Transmission déclarée par vous.';
+      else if(event.event_type==='cleaning_request_received'||event.event_type==='cleaning_completed_by_team')description='Départ concerné : '+(detail.departure?dateLabel(detail.departure):'date à vérifier')+'.';
+      else if(event.event_type==='arrival_time_updated'||event.event_type==='departure_time_updated')description=(detail.from||'—')+' → '+(detail.to||'—')+'.';
       else if(detail.arrival)description=dateLabel(detail.arrival)+' → '+dateLabel(detail.departure)+(detail.source?' · '+(sources[detail.source]||detail.source):'');
       if(description)text(item,'p',description);item.prepend(head);list.append(item);
     });
@@ -150,11 +155,11 @@
     parent.append(panel);
   }
   function cleaningMessage(row,task) {
-    const incoming=task.same_day_arrival?current.records.find(item=>item.id===task.same_day_arrival):null;
-    const lines=['LE NOYER — PASSAGE MÉNAGE','Date : '+dateInput(task.date),'Créneau de préparation : 9 h à 17 h',
+    const incoming=task.next_arrival?current.records.find(item=>item.id===task.next_arrival):null;
+    const lines=['LE NOYER — PASSAGE MÉNAGE','Date : '+dateInput(task.date),'Créneau de préparation : '+(row.departure_time||'09:00').replace(':',' h ')+' à 17 h',
       'Séjour sortant : '+(row.name||sources[row.source]||'Voyageurs')+' · '+row.guests+' personnes'];
-    lines.push(incoming?'Nouvelle arrivée le même jour : '+(incoming.name||sources[incoming.source]||'Voyageurs')+' · '+incoming.guests+' personnes, à partir de 17 h.':'Aucune nouvelle arrivée le même jour.');
-    lines.push('Adresse : Rue Bierleux 69A, 4990 Lierneux.','Consignes : '+(row.cleaning_note||'Aucune consigne particulière.'));
+    lines.push(incoming?(incoming.arrival===task.date?'Nouvelle arrivée le même jour : ':'Prochaine arrivée le '+dateInput(incoming.arrival)+' : ')+(incoming.name||sources[incoming.source]||'Voyageurs')+' · '+incoming.guests+' personnes, à partir de '+(incoming.arrival_time||'17:00').replace(':',' h ')+'.':'Aucune prochaine arrivée enregistrée.');
+    lines.push('Adresse : Rue Bierleux 69A, 4990 Lierneux.','Consignes : '+(row.cleaning_note||'Aucune consigne particulière.'),'Après réception, confirmez la demande et la fin du ménage dans l’espace équipe : '+window.location.origin+'/equipe-menage');
     return lines.join('\n');
   }
   function openCleaningShare(row,task) {
@@ -250,7 +255,7 @@
     const row=current?.records.find(record=>record.id===identifier);
     if(row)showRecord(row);
   }
-  function workflowPayload(row) {return {version:row.version,notes:row.notes,cleaning_note:row.cleaning_note||'',checklist:{...row.checklist}}}
+  function workflowPayload(row) {return {version:row.version,notes:row.notes,cleaning_note:row.cleaning_note||'',arrival_time:row.arrival_time||'17:00',departure_time:row.departure_time||'09:00',checklist:{...row.checklist}}}
   function displayDraft(row,kind,draft,paymentId=null) {
     element('draft-recipient').textContent=draft.recipient || 'Adresse du voyageur à compléter';
     element('draft-subject').value=draft.subject;element('draft-body').value=draft.body;
@@ -343,6 +348,11 @@
       const card=document.createElement('article');card.className='operation-row';
       const date=document.createElement('div');date.className='operation-date';text(date,'strong',dateLabel(row.arrival));text(date,'span',row.arrival===current.today?'Aujourd’hui':'J−'+daysUntil(row.arrival));card.append(date);
       const info=document.createElement('div');text(info,'strong',row.name||sources[row.source]);text(info,'span',(row.source==='direct'?'Site Le Noyer':sources[row.source])+' · '+row.guests+' voyageurs');card.append(info);
+      const hours=document.createElement('form');hours.className='operation-hours';
+      [['Heure d’arrivée annoncée','arrival_time',row.arrival_time||'17:00'],['Heure de départ','departure_time',row.departure_time||'09:00']].forEach(([label,key,value])=>{const field=document.createElement('label');text(field,'span',label);const input=document.createElement('input');input.type='time';input.name=key;input.value=value;field.append(input);hours.append(field)});
+      const saveHours=text(hours,'button','Enregistrer les horaires');saveHours.type='submit';saveHours.className='btn btn-outline';
+      hours.addEventListener('submit',async event=>{event.preventDefault();saveHours.disabled=true;try{const payload=workflowPayload(row);payload.arrival_time=hours.elements.namedItem('arrival_time').value;payload.departure_time=hours.elements.namedItem('departure_time').value;await api('requests/'+row.id+'/workflow',payload);await refresh();notice('Horaires enregistrés pour le voyageur et l’équipe ménage.')}catch(error){notice(error.message)}finally{saveHours.disabled=false}});
+      card.append(hours);
       const ready=Boolean(row.checklist.reception_ready);text(card,'span',ready?'Accueil prêt':'À préparer','record-status '+(ready?'status-confirmed':'status-pending'));
       const actions=document.createElement('div');actions.className='operation-actions';
       button(actions,ready?'Voir le séjour':'Préparer l’accueil',()=>showRecord(row),'btn btn-outline');card.append(actions);parent.append(card);
@@ -356,7 +366,7 @@
       const card=document.createElement('article');card.className='operation-row';
       const date=document.createElement('div');date.className='operation-date';text(date,'strong',dateLabel(task.date));text(date,'span','9 h–17 h');card.append(date);
       const info=document.createElement('div');text(info,'strong','Départ · '+(row.name||sources[row.source]));text(info,'span',task.same_day_arrival?'Nouvelle arrivée le même jour':'Maison à préparer pour le prochain séjour');card.append(info);
-      text(card,'span',task.done?'Maison prête':'À faire','record-status '+(task.done?'status-confirmed':'status-pending'));
+      text(card,'span',task.done?'Ménage terminé':task.received?'Demande reçue':task.requested?'En attente de confirmation':'Demande à transmettre','record-status '+(task.done?'status-confirmed':'status-pending'));
       const actions=document.createElement('div');actions.className='operation-actions';
       button(actions,'Partager les consignes',()=>openCleaningShare(row,task),'btn btn-outline');
       button(actions,task.done?'Annuler la validation':'Marquer la maison prête',async()=>{const payload=workflowPayload(row);payload.checklist.cleaning_done=!task.done;await api('requests/'+row.id+'/workflow',payload);await refresh()},'btn btn-outline');
@@ -366,17 +376,17 @@
   function fillRate(rate) {
     showPage('pricing',true);
     const form=element('rate-form');form.reset();
-    Object.entries({id:0,label:rate.label+' (copie)',start:rate.start,end:rate.end,midweek:(rate.midweek_cents/100).toFixed(2),weekend:(rate.weekend_cents/100).toFixed(2),cleaning:(rate.cleaning_cents/100).toFixed(2)}).forEach(([key,value])=>form.elements.namedItem(key).value=value);
+    Object.entries({id:0,label:rate.label+' (copie)',start:rate.start,end:rate.end,midweek:(rate.midweek_cents/100).toFixed(2),weekend:(rate.weekend_cents/100).toFixed(2),cleaning:(rate.cleaning_cents/100).toFixed(2),charges:((rate.charges_cents||0)/100).toFixed(2)}).forEach(([key,value])=>form.elements.namedItem(key).value=value);
     form.scrollIntoView({block:'start'});form.elements.namedItem('start').focus();notice('Prix copiés. Choisissez une nouvelle période sans chevauchement, puis enregistrez.');
   }
   function renderRates() {
     const parent=element('rates');parent.replaceChildren();
     if(!currentRates.length){const empty=document.createElement('div');empty.className='empty-state';text(empty,'strong','Aucune période tarifaire.');text(empty,'p','Ajoute une première saison avec le formulaire.');parent.append(empty);return}
     const table=document.createElement('table');table.className='rates-table';const head=document.createElement('thead'),header=document.createElement('tr');
-    ['Choisir','Période d’arrivée','Mid-week (€)','Week-end (€)','Ménage (€)','Actions'].forEach(label=>{const cell=text(header,'th',label);cell.scope='col'});head.append(header);table.append(head);const body=document.createElement('tbody');
+    ['Choisir','Période d’arrivée','Mid-week (€)','Week-end (€)','Ménage (€)','Charges / séjour (€)','Actions'].forEach(label=>{const cell=text(header,'th',label);cell.scope='col'});head.append(header);table.append(head);const body=document.createElement('tbody');
     currentRates.forEach(rate=>{const row=document.createElement('tr'),selectCell=document.createElement('td'),select=document.createElement('input');select.type='checkbox';select.checked=selectedRates.has(rate.id);select.setAttribute('aria-label','Sélectionner '+rate.label);select.addEventListener('change',()=>{if(select.checked)selectedRates.add(rate.id);else selectedRates.delete(rate.id)});selectCell.append(select);row.append(selectCell);
       text(row,'td',rate.label+' · '+dateLabel(rate.start)+' au '+dateLabel(rate.end)+' (fin exclue)');const inputs={};
-      ['midweek','weekend','cleaning'].forEach(key=>{const cell=document.createElement('td'),input=document.createElement('input');input.type='number';input.min=key==='cleaning'?'0':'0.01';input.max='100000';input.step='0.01';input.required=true;input.value=(rate[key+'_cents']/100).toFixed(2);input.setAttribute('aria-label',rate.label+' '+key+' en euros');inputs[key]=input;cell.append(input);row.append(cell)});
+      ['midweek','weekend','cleaning','charges'].forEach(key=>{const cell=document.createElement('td'),input=document.createElement('input');input.type='number';input.min=['cleaning','charges'].includes(key)?'0':'0.01';input.max='100000';input.step='0.01';input.required=true;input.value=((rate[key+'_cents']||0)/100).toFixed(2);input.setAttribute('aria-label',rate.label+' '+key+' en euros');inputs[key]=input;cell.append(input);row.append(cell)});
       const actions=document.createElement('td');
       button(actions,'Enregistrer',async()=>{if(!Object.values(inputs).every(input=>input.reportValidity()))return;await api('rates',{id:rate.id,label:rate.label,start:rate.start,end:rate.end,...Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value]))});await refresh();notice('Tarif enregistré.')},'table-action');
       button(actions,'Copier la saison',()=>fillRate(rate),'table-action');button(actions,'Désactiver',async()=>{if(!window.confirm('Désactiver cette période tarifaire ?'))return;await api('rates/'+rate.id+'/deactivate',{});await refresh()},'table-action');row.append(actions);body.append(row);

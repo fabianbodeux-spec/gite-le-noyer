@@ -40,6 +40,8 @@ python3 -c 'from serveur import load_admin_token; print(load_admin_token(), end=
 
 La seconde commande transmet la clé locale au service par l’entrée standard, sans l’inscrire dans la commande shell ni dans Git. Elle réutilise la clé locale ou en crée une si nécessaire. Cette clé permettra d’ouvrir `/admin` en ligne. Ne pas envoyer sa valeur dans une conversation ou une capture de logs. La configuration en ligne refuse de démarrer sans clé explicite et ne l’imprime pas dans les logs de déploiement.
 
+Pour activer l’espace séparé de l’équipe ménage, ajoutez également `NOYER_CLEANING_TOKEN` dans les variables Railway. Générez une clé d’au moins 24 caractères (par exemple avec `openssl rand -hex 24`), enregistrez-la comme variable secrète, puis redéployez. Transmettez cette clé à la personne chargée du ménage par un canal privé ; elle ouvrira `/equipe-menage`. Cette clé donne accès au planning de ménage uniquement, jamais aux tarifs, paiements ou dossiers propriétaires. Sans cette variable, l’application reste en ligne, mais l’espace équipe reste fermé.
+
 Le fuseau horaire du conteneur est `Europe/Brussels`. Railway fournit `PORT` automatiquement. Ne pas ajouter de variable `PORT` arbitraire si aucun réglage de port particulier n’est nécessaire.
 
 ## 4. Envoyer les fichiers et déployer

@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -r
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY deployment.py wsgi.py serveur.py reservations.py operations.py ./
-COPY index.html midweek.html admin.html favicon.svg ./
-COPY site.css booking.css workspace.css site.js booking.js admin.js workspace.js ./
+COPY index.html midweek.html admin.html equipe-menage.html favicon.svg ./
+COPY site.css booking.css workspace.css cleaning.css site.js booking.js admin.js workspace.js cleaning.js ./
 COPY photos ./photos
 COPY traces ./traces
 

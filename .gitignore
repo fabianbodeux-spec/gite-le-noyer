@@ -9,6 +9,7 @@ __pycache__/
 .DS_Store
 *.log
 .noyer-admin-key
+.noyer-cleaning-key
 .railway/
 data/
 backups/

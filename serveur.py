@@ -40,8 +40,33 @@ def load_admin_token(root=ROOT, required=False):
     return token
 
 
-def make_handler(store, admin_token, root=ROOT):
+def load_cleaning_token(root=ROOT, create=False):
+    configured = os.environ.get('NOYER_CLEANING_TOKEN')
+    if configured is not None:
+        token = configured.strip()
+    elif create:
+        target = root / '.noyer-cleaning-key'
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            token = target.read_text().strip()
+        else:
+            token = secrets.token_urlsafe(32)
+            with os.fdopen(descriptor, 'w') as stream:
+                stream.write(token + '\n')
+        target.chmod(0o600)
+    else:
+        return ''
+    if len(token) < 24 or any(character.isspace() for character in token):
+        raise SystemExit('La clé équipe ménage doit contenir au moins 24 caractères sans espace.')
+    return token
+
+
+def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
     operations = Operations(store)
+    cleaning_token = cleaner_token.strip()
+    if cleaning_token and (len(cleaning_token) < 24 or any(character.isspace() for character in cleaning_token)):
+        raise SystemExit('NOYER_CLEANING_TOKEN doit contenir au moins 24 caractères sans espace.')
     class Handler(BaseHTTPRequestHandler):
         def respond(self, status, body, mime='application/json; charset=utf-8'):
             if isinstance(body, dict):
@@ -61,6 +86,13 @@ def make_handler(store, admin_token, root=ROOT):
             supplied = self.headers.get('Authorization', '').removeprefix('Bearer ')
             if not hmac.compare_digest(supplied.encode(), admin_token.encode()):
                 raise BookingError('Clé propriétaire requise.', 401)
+
+        def authorize_cleaner(self):
+            if not cleaning_token:
+                raise BookingError('L’accès de l’équipe ménage doit être configuré par le propriétaire.', 503)
+            supplied = self.headers.get('Authorization', '').removeprefix('Bearer ')
+            if not hmac.compare_digest(supplied.encode(), cleaning_token.encode()):
+                raise BookingError('Clé équipe ménage refusée.', 401)
 
         def read_json(self):
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
@@ -93,14 +125,17 @@ def make_handler(store, admin_token, root=ROOT):
                 if url.path == '/api/admin/workspace':
                     self.authorize()
                     return self.respond(200, operations.workspace(params.get('year', [str(date.today().year)])[0]))
+                if url.path == '/api/cleaning/workspace':
+                    self.authorize_cleaner()
+                    return self.respond(200, operations.cleaning_workspace(params.get('year', [str(date.today().year)])[0]))
                 if url.path in ('/api/availability', '/api/admin/state'):
                     private = url.path == '/api/admin/state'
                     if private:
                         self.authorize()
                     return self.respond(200, store.calendar(params.get('year', [str(date.today().year)])[0], private))
                 path = unquote(url.path)
-                relative = {'/': 'index.html', '/admin': 'admin.html'}.get(path, path.lstrip('/'))
-                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css')
+                relative = {'/': 'index.html', '/admin': 'admin.html', '/equipe-menage': 'equipe-menage.html'}.get(path, path.lstrip('/'))
+                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css')
                 allowed = allowed or bool(re.fullmatch(r'photos/[0-9]+\.jpg|traces/promenade-12\.(gpx|geojson)', relative))
                 target = (root / relative).resolve()
                 if not allowed or not target.is_relative_to(root.resolve()) or not target.is_file():
@@ -116,6 +151,8 @@ def make_handler(store, admin_token, root=ROOT):
                 path = urlsplit(self.path).path
                 if path.startswith('/api/admin/'):
                     self.authorize()
+                elif path.startswith('/api/cleaning/'):
+                    self.authorize_cleaner()
                 data = self.read_json()
                 if path == '/api/quote':
                     return self.respond(200, store.quote(data))
@@ -131,6 +168,9 @@ def make_handler(store, admin_token, root=ROOT):
                     return self.respond(201, operations.add_inquiry(data))
                 if path == '/api/admin/rates/bulk':
                     return self.respond(200, operations.bulk_rates(data))
+                match = re.fullmatch(r'/api/cleaning/tasks/(\d+)/(received|complete)', path)
+                if match:
+                    return self.respond(200, operations.cleaning_task_update(int(match[1]), match[2]))
                 match = re.fullmatch(r'/api/admin/external/(\d+)', path)
                 if match:
                     return self.respond(200, operations.add_inquiry(data, int(match[1])))
@@ -164,10 +204,11 @@ def main():
     store = Store(ROOT / 'demandes.sqlite3')
     store.initialize()
     token = load_admin_token()
+    cleaner_token = load_cleaning_token(ROOT, create=True)
     server = None
     for port in (8040, 8041, 8042):
         try:
-            server = ThreadingHTTPServer(('127.0.0.1', port), make_handler(store, token))
+            server = ThreadingHTTPServer(('127.0.0.1', port), make_handler(store, token, cleaner_token=cleaner_token))
             break
         except OSError as error:
             if error.errno != errno.EADDRINUSE:
@@ -175,7 +216,7 @@ def main():
     if server is None:
         raise SystemExit('Ports 8040, 8041 et 8042 occupés.')
     url = f'http://127.0.0.1:{server.server_port}'
-    print(f'\nLE NOYER\nSite : {url}/\nGestion : {url}/admin\nClé propriétaire : {token}\nArrêter : Ctrl+C\n', flush=True)
+    print(f'\nLE NOYER\nSite : {url}/\nGestion : {url}/admin\nEspace ménage : {url}/equipe-menage\nClé propriétaire : {token}\nClé équipe ménage : {cleaner_token}\nArrêter : Ctrl+C\n', flush=True)
     webbrowser.open(url + '/')
     try:
         server.serve_forever()

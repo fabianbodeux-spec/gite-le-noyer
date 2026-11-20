@@ -120,6 +120,9 @@ class Store:
                 start TEXT NOT NULL, end TEXT NOT NULL,
                 midweek_cents INTEGER NOT NULL, weekend_cents INTEGER NOT NULL,
                 cleaning_cents INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1)''')
+            rate_columns = {row['name'] for row in connection.execute('PRAGMA table_info(package_rates)')}
+            if 'charges_cents' not in rate_columns:
+                connection.execute('ALTER TABLE package_rates ADD COLUMN charges_cents INTEGER NOT NULL DEFAULT 0')
             connection.execute('CREATE INDEX IF NOT EXISTS booking_dates ON demandes(status,arrival,departure)')
             from operations import initialize_operations
             initialize_operations(connection)
@@ -152,8 +155,8 @@ class Store:
                   'arrival_time': '17:00', 'departure_time': '09:00',
                   'nights':nights,'base_package_cents':base_amount,
                   'package_cents': amount, 'period': rate['label'],
-                  'cleaning_cents': rate['cleaning_cents'], 'currency': 'EUR',
-                  'total_cents': amount + rate['cleaning_cents']}
+                  'cleaning_cents': rate['cleaning_cents'], 'charges_cents': rate['charges_cents'], 'currency': 'EUR',
+                  'total_cents': amount + rate['cleaning_cents'] + rate['charges_cents']}
         result['token'] = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
         return result
 
@@ -184,16 +187,16 @@ class Store:
             raise BookingError("Nommez la période tarifaire.")
         rate_id = integer(data.get('id', 0), 0, 100000000, 'Identifiant')
         values = (label, start.isoformat(), end.isoformat(), cents(data.get('midweek')),
-                  cents(data.get('weekend')), cents(data.get('cleaning'), True))
+                  cents(data.get('weekend')), cents(data.get('cleaning'), True), cents(data.get('charges', 0), True))
         with self.connection(True) as connection:
             if connection.execute('SELECT id FROM package_rates WHERE active=1 AND start < ? AND end > ? AND id != ?',
                                   (end.isoformat(), start.isoformat(), rate_id)).fetchone():
                 raise BookingError("Cette période chevauche un tarif existant. Modifiez ou désactivez ce tarif.", 409)
             if rate_id:
-                if not connection.execute('UPDATE package_rates SET label=?,start=?,end=?,midweek_cents=?,weekend_cents=?,cleaning_cents=?,active=1 WHERE id=?', values+(rate_id,)).rowcount:
+                if not connection.execute('UPDATE package_rates SET label=?,start=?,end=?,midweek_cents=?,weekend_cents=?,cleaning_cents=?,charges_cents=?,active=1 WHERE id=?', values+(rate_id,)).rowcount:
                     raise BookingError("Tarif introuvable.", 404)
             else:
-                rate_id = connection.execute('INSERT INTO package_rates(label,start,end,midweek_cents,weekend_cents,cleaning_cents) VALUES (?,?,?,?,?,?)', values).lastrowid
+                rate_id = connection.execute('INSERT INTO package_rates(label,start,end,midweek_cents,weekend_cents,cleaning_cents,charges_cents) VALUES (?,?,?,?,?,?,?)', values).lastrowid
         return {'id': rate_id}
 
     def block(self, data):

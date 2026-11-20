@@ -175,7 +175,7 @@ function bookingDateChoice(selection, value, packageName, calendarDays, today) {
       if(current!==revision)return null;
       quote=data;result.replaceChildren();
       const total=document.createElement('p');total.className='quote-total';total.textContent=money(data.total_cents)+' pour votre '+data.package_label.toLowerCase();result.append(total);
-      const price=document.createElement('p');price.textContent='Logement entier : '+money(data.package_cents)+(data.package==='midweek'?' (tarif ajusté sur '+data.nights+' nuits, référence '+money(data.base_package_cents)+' pour 4 nuits)':' (tarif week-end fixe)')+' + ménage : '+money(data.cleaning_cents)+'.';result.append(price);
+      const price=document.createElement('p');price.textContent='Logement entier : '+money(data.package_cents)+(data.package==='midweek'?' (tarif ajusté sur '+data.nights+' nuits, référence '+money(data.base_package_cents)+' pour 4 nuits)':' (tarif week-end fixe)')+' + ménage : '+money(data.cleaning_cents)+' + charges fixes de saison : '+money(data.charges_cents)+'.';result.append(price);
       const schedule=document.createElement('p');schedule.textContent=prettyDate(data.arrival)+' à 17 h → '+prettyDate(data.departure)+' à 9 h.';result.append(schedule);
       return data;
     } catch(error){if(current===revision){result.className='quote-details quote-error';result.textContent=error.message}return null}

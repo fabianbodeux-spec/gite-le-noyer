@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f8f6ef">
+  <title>Équipe ménage — Le Noyer</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/cleaning.css">
+  <script defer src="/cleaning.js"></script>
+</head>
+<body>
+  <header class="clean-top"><a href="/" class="brand"><img src="/favicon.svg" width="42" height="42" alt=""><span><strong>Le Noyer</strong><small>Équipe ménage</small></span></a><a href="/admin">Espace propriétaire</a></header>
+  <main class="clean-main">
+    <section id="login-panel" class="clean-login">
+      <p class="eyebrow">ACCÈS ÉQUIPE</p><h1>Les rotations de ménage</h1>
+      <p>Consultez les départs, les prochaines arrivées et les consignes. Confirmez la réception de chaque demande, puis validez le ménage une fois terminé.</p>
+      <form id="login-form"><label for="clean-key">Clé d’accès équipe<input id="clean-key" type="password" autocomplete="current-password" required></label><button class="primary">Ouvrir le planning</button></form>
+      <p id="login-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section id="planning" hidden>
+      <div class="plan-head"><div><p class="eyebrow">ESPACE ÉQUIPE</p><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="year">Année</label><input id="year" type="number" min="2000" max="2100"><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
+      <p id="plan-status" class="status" role="status" aria-live="polite"></p>
+      <div id="tasks" class="task-list" aria-live="polite"></div>
+    </section>
+  </main>
+</body>
+</html>

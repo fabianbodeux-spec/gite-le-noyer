@@ -6,7 +6,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 from reservations import Store
-from serveur import ROOT, load_admin_token, make_handler
+from serveur import ROOT, load_admin_token, load_cleaning_token, make_handler
 
 
 def create_application(root=ROOT):
@@ -20,9 +20,10 @@ def create_application(root=ROOT):
         raise SystemExit('Configurez NOYER_ADMIN_TOKEN dans les variables du service Railway.')
     data_dir.mkdir(parents=True, exist_ok=True)
     token = load_admin_token(data_dir, required=production)
+    cleaner_token = load_cleaning_token(data_dir)
     store = Store(data_dir / 'demandes.sqlite3')
     store.initialize()
-    handler_class = make_handler(store, token, root)
+    handler_class = make_handler(store, token, root, cleaner_token)
 
     def application(environ, start_response):
         response = []
