@@ -115,30 +115,27 @@
   element('login').addEventListener('submit',async event=>{
     event.preventDefault();
     const trigger=event.currentTarget.querySelector('button');trigger.disabled=true;
-    const useKey=!element('admin-key-field').hidden;
+    const secret=element('admin-pin').value.trim().replace(/^Cl[ée]\s+(propri[ée]taire|de secours)\s*:\s*/i,'').trim();
+    const useKey=!/^\d{6}$/.test(secret);
     announce('Connexion…');
     try {
       if(useKey){
-        token=element('admin-token').value.trim().replace(/^Cl[ée]\s+(propri[ée]taire|de secours)\s*:\s*/i,'').trim();
+        if(secret.length<24)throw Error('Entrez votre code à 6 chiffres avec votre prénom, ou la clé propriétaire complète.');
+        token=secret;
         window.NoyerAccount=null;
       } else {
         token='';
-        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:element('admin-name').value,pin:element('admin-pin').value})});
+        if(!element('admin-name').value.trim())throw Error('Indiquez votre prénom avec votre code à 6 chiffres.');
+        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:element('admin-name').value,pin:secret})});
         const member=await response.json();if(!response.ok)throw Error(member.error||'Connexion impossible.');
         if(member.role!=='owner'){await fetch('/api/account/logout',{method:'POST'});location.href='/equipe-menage';return}
         window.NoyerAccount=member;
       }
-      await openManagement();element('admin-token').value='';element('admin-pin').value='';
+      await openManagement();element('admin-pin').value='';
     }catch(error){token='';announce(error.message)}
     finally{trigger.disabled=false}
   });
-  element('use-rescue-key').addEventListener('click',()=>{
-    const showKey=element('admin-key-field').hidden;
-    element('admin-key-field').hidden=!showKey;element('admin-pin-fields').hidden=showKey;
-    element('admin-name').required=!showKey;element('admin-pin').required=!showKey;element('admin-token').required=showKey;
-    element('use-rescue-key').textContent=showKey?'Utiliser mon prénom et mon code':'Utiliser la clé de secours';
-    (showKey?element('admin-token'):element('admin-name')).focus();
-  });
+
   // Session permanente : l'appareil reste connecté jusqu'à « Fermer la gestion ».
   fetch('/api/account/me').then(response=>response.ok?response.json():null).then(async member=>{
     if(!member)return;

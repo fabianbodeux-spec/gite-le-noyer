@@ -1,6 +1,6 @@
 (() => {
   const $=id=>document.getElementById(id);
-  const login=$('login-panel'),planning=$('planning'),tasks=$('tasks'),keyInput=$('clean-key');
+  const login=$('login-panel'),planning=$('planning'),tasks=$('tasks'),keyInput=$('clean-pin');
   let accessKey='';
   const date=value=>new Intl.DateTimeFormat('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(value+'T12:00:00'));
   const time=value=>value?value.slice(0,5).replace(':',' h '):'—';
@@ -40,22 +40,21 @@
     }catch(error){$('plan-status').textContent=error.message;if(/refusée|requise/.test(error.message))logout()}
   }
   async function update(button,id,action){button.disabled=true;try{await request('/api/cleaning/tasks/'+id+'/'+action,{});await refresh()}catch(error){$('plan-status').textContent=error.message;button.disabled=false}}
-  function logout(){if(!accessKey)fetch('/api/account/logout',{method:'POST'}).catch(()=>{});accessKey='';keyInput.value='';$('clean-pin').value='';planning.hidden=true;login.hidden=false;$('login-status').textContent='Vous êtes déconnecté.'}
+  function logout(){if(!accessKey)fetch('/api/account/logout',{method:'POST'}).catch(()=>{});accessKey='';keyInput.value='';planning.hidden=true;login.hidden=false;$('login-status').textContent='Vous êtes déconnecté.'}
   async function openPlanning(){login.hidden=true;planning.hidden=false;await refresh()}
   $('login-form').addEventListener('submit',async event=>{
     event.preventDefault();const status=$('login-status');
-    const useKey=!$('key-field').hidden;
+    const secret=$('clean-pin').value.trim();const useKey=!/^\d{6}$/.test(secret);
     try{
-      if(useKey){accessKey=keyInput.value.trim();status.textContent='Vérification de la clé…';await request('/api/cleaning/workspace')}
+      if(useKey){if(secret.length<24)throw Error('Entrez votre code à 6 chiffres avec votre prénom, ou la clé d’équipe complète.');accessKey=secret;status.textContent='Vérification de la clé…';await request('/api/cleaning/workspace')}
       else{
-        accessKey='';status.textContent='Connexion…';
-        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('clean-name').value,pin:$('clean-pin').value})});
+        accessKey='';if(!$('clean-name').value.trim())throw Error('Indiquez votre prénom avec votre code à 6 chiffres.');status.textContent='Connexion…';
+        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('clean-name').value,pin:secret})});
         const data=await response.json();if(!response.ok)throw Error(data.error||'Connexion impossible.');
       }
       status.textContent='';await openPlanning();
     }catch(error){accessKey='';status.textContent=error.message}
   });
-  $('use-key').addEventListener('click',()=>{const showKey=$('key-field').hidden;$('clean-name').required=!showKey;$('clean-pin').required=!showKey;keyInput.required=showKey;$('key-field').hidden=!showKey;$('pin-fields').hidden=showKey;$('use-key').textContent=showKey?'Utiliser mon prénom et mon code':'Utiliser la clé d’équipe';(showKey?keyInput:$('clean-name')).focus()});
   // Session permanente : on rouvre directement le planning si l'appareil est déjà connecté.
   fetch('/api/account/me').then(response=>response.ok?response.json():null).then(member=>{if(member){$('who').textContent=member.name;openPlanning()}}).catch(()=>{});
   $('refresh').addEventListener('click',refresh);$('task-filter').addEventListener('change',refresh);$('logout').addEventListener('click',logout);

@@ -202,3 +202,5 @@
 .erp-body .member-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .erp-body .member-actions .btn{min-height:38px;padding:7px 12px;font-size:12.5px}
 @media(max-width:900px){.erp-body .members-layout{grid-template-columns:1fr}.erp-body .member-row{grid-template-columns:1fr auto}.erp-body .member-meta,.erp-body .member-actions{grid-column:1/-1;justify-content:flex-start}}
+
+.erp-body .login-hint{margin:-4px 0 4px;color:var(--g-muted);font-size:13px}

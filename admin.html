@@ -22,12 +22,11 @@
       <h1>La maison, bien organisée.</h1>
       <p>Réservations, préparation des séjours et calendrier, réunis dans un seul espace.</p>
       <form id="login" class="admin-login">
-        <div id="admin-pin-fields"><label for="admin-name">Votre prénom<input id="admin-name" type="text" autocomplete="username" autocapitalize="words" required></label>
-        <label for="admin-pin">Votre code à 6 chiffres<input id="admin-pin" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="current-password" required></label></div>
-        <div id="admin-key-field" hidden><label for="admin-token">Clé de secours<input id="admin-token" type="password" autocomplete="off"></label></div>
+        <label for="admin-name">Votre prénom<input id="admin-name" type="text" autocomplete="username" autocapitalize="words"></label>
+        <label for="admin-pin">Votre code à 6 chiffres<input id="admin-pin" type="password" autocomplete="current-password" required></label>
+        <p class="login-hint">Première connexion ou code oublié : laissez le prénom vide et collez votre clé propriétaire dans le champ du code.</p>
         <button class="btn">Ouvrir la gestion</button>
       </form>
-      <button id="use-rescue-key" class="link-button" type="button">Utiliser la clé de secours</button>
       <p id="admin-status" role="status" aria-live="polite"></p>
     </main>
   </div>

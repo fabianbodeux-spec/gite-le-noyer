@@ -16,7 +16,7 @@
     <section id="login-panel" class="clean-login">
       <p class="eyebrow">Accès équipe</p><h1>Les rotations de ménage</h1>
       <p>Connectez-vous avec votre prénom et votre code personnel. Cet appareil restera connecté jusqu’à ce que vous cliquiez sur « Fermer ».</p>
-      <form id="login-form"><div id="pin-fields"><label for="clean-name">Votre prénom<input id="clean-name" type="text" autocomplete="username" autocapitalize="words" required></label><label for="clean-pin">Votre code à 6 chiffres<input id="clean-pin" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="current-password" required></label></div><div id="key-field" hidden><label for="clean-key">Clé d’accès équipe<input id="clean-key" type="password" autocomplete="off"></label></div><button class="primary">Ouvrir le planning</button></form><button id="use-key" class="link-button" type="button">Utiliser la clé d’équipe</button>
+      <form id="login-form"><label for="clean-name">Votre prénom<input id="clean-name" type="text" autocomplete="username" autocapitalize="words"></label><label for="clean-pin">Votre code à 6 chiffres<input id="clean-pin" type="password" autocomplete="current-password" required></label><p class="hint">Pas encore de code personnel : laissez le prénom vide et collez la clé d’équipe dans le champ du code.</p><button class="primary">Ouvrir le planning</button></form>
       <p id="login-status" class="status" role="status" aria-live="polite"></p>
     </section>
     <section id="planning" hidden>
