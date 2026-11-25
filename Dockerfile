@@ -12,7 +12,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY deployment.py wsgi.py serveur.py reservations.py operations.py ./
 COPY index.html midweek.html admin.html equipe-menage.html favicon.svg ./
-COPY site.css booking.css workspace.css cleaning.css relief.css site.js booking.js admin.js workspace.js cleaning.js relief.js ./
+COPY site.css booking.css workspace.css cleaning.css relief.css site.js booking.js admin.js workspace.js cleaning.js relief.js ui.js ./
 COPY vendor ./vendor
 COPY fonts ./fonts
 COPY relief ./relief

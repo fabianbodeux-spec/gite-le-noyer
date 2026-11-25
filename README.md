@@ -15,7 +15,8 @@ Ouvrir l’adresse indiquée par le serveur (ports 8040 à 8042). Le formulaire 
 
 ## Pages et ressources
 
-- `index.html` : maison, galerie filtrable avec agrandissement, demande de séjour.
+- `index.html` : ouverture sur le relief 3D, maison, galerie filtrable avec agrandissement, randonnée, puis demande de séjour dans un panneau latéral (`#reserver`, ouvert par tout lien `/#reserver`).
+- `ui.js` : en-tête masqué en descendant et transparent sur le relief, panneau de réservation, profondeur légère des photos.
 - `midweek.html` : espace dédié aux marcheurs, choix de distances, circuits existants, téléchargement GPX, aperçu local du tracé et préparation du séjour.
 - `site.css` : styles partagés, adaptations mobile, focus clavier et réduction des mouvements.
 - `site.js` : interactions, navigation des photos et distances au clavier, formulaire et aperçu GPX sans dépendance à une carte externe.

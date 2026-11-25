@@ -177,8 +177,8 @@ async function buildScene(stage) {
     labels.push({ el, anchor });
     return el;
   };
-  addLabel(houseTop, `<strong>Le Noyer</strong><small>≈ ${houseAltitude} m · Bierleux</small>`, 'is-house');
-  if (startTop) addLabel(startTop, `<strong>Promenade 12</strong><small>départ · Trou de Bra</small>`);
+  addLabel(houseTop, `<strong>Le Noyer</strong><small>Bierleux, vers ${houseAltitude} m</small>`, 'is-house');
+  if (startTop) addLabel(startTop, `<strong>Promenade 12</strong><small>Départ à Trou de Bra</small>`);
 
   // Caméra orbitale (cible + coordonnées sphériques).
   const view = { target: new THREE.Vector3(), radius: 9, polar: 0.95, azimuth: -0.4 };
@@ -387,15 +387,3 @@ if (roots.length && webglAvailable()) {
   roots.forEach((r) => r.classList.add('is-fallback'));
 }
 
-/* ---------- Apparitions discrètes au défilement ---------- */
-if (!reduceMotion && 'IntersectionObserver' in window) {
-  const targets = document.querySelectorAll('.story-layout > *, .midweek-layout > *, .section-head, .booking-copy, .r7-feature, .planning-grid > *');
-  const reveal = new IntersectionObserver((entries) => {
-    for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('is-visible'); reveal.unobserve(entry.target); }
-  }, { rootMargin: '0px 0px -8% 0px' });
-  targets.forEach((el) => {
-    if (el.getBoundingClientRect().top < innerHeight) return;
-    el.classList.add('reveal');
-    reveal.observe(el);
-  });
-}

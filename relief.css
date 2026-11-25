@@ -14,9 +14,8 @@
 
 .relief-copy{position:absolute;z-index:2;left:max(48px,calc((100% - 1280px)/2));top:0;bottom:0;width:min(440px,calc(100% - 40px));display:flex;flex-direction:column;justify-content:center;pointer-events:none}
 .relief-copy .location{color:#cfd8cc;margin-bottom:18px}
-.relief-copy h2{font-size:clamp(2.4rem,4.4vw,4.4rem)}
 .relief-steps{list-style:none;margin:34px 0 0;padding:0;display:grid}
-.relief-steps li{grid-area:1/1;max-width:360px;padding-left:18px;border-left:2px solid var(--copper);opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+.relief-steps li{grid-area:1/1;max-width:360px;padding-left:18px;border-left:2px solid var(--copper);opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease,visibility .6s}
 .relief-steps li[data-active]{opacity:1;transform:none}
 .relief-steps strong{display:block;font-family:var(--display);font-weight:400;font-size:1.45rem;line-height:1.2;margin-bottom:8px}
 .relief-steps p{color:#dbe4d6;font-size:16px}
@@ -60,7 +59,6 @@
 @media(max-width:800px){
   .relief-home{height:260vh}
   .relief-copy{left:20px;top:auto;bottom:70px;justify-content:flex-end;width:calc(100% - 40px)}
-  .relief-copy h2{font-size:2.4rem}
   .relief-steps{margin-top:20px}
   .relief-steps p{font-size:15px}
   .relief-sticky::after{background:linear-gradient(0deg,rgba(24,54,40,.95) 0,rgba(24,54,40,.7) 42%,rgba(24,54,40,0) 70%)}

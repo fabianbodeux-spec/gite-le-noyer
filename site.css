@@ -8,19 +8,132 @@
 
 :where(.story-layout) .value-note{margin-top:1.25rem;padding-left:1rem;border-left:2px solid var(--copper);font-family:var(--display);font-size:1.12rem;line-height:1.45}
 
-/* Refonte 2026 : mosaïque photo, détails éditoriaux */
-h1 em,h2 em{font-style:italic;font-weight:300;color:var(--copper)}
-.stats strong{font-family:var(--display);font-weight:400;font-size:34px;letter-spacing:-.02em}
+/* Refonte 2026 : luxe discret, ivoire dominant */
+:root{--line:#e1e1d6;--header:72px}
+.wrap{width:min(1280px,calc(100% - 96px))}
+h2{font-size:clamp(2.3rem,4.2vw,4.2rem)}
+
+/* En-tête fin, masqué en descendant */
+.site-header{position:fixed;top:0;left:0;right:0;height:var(--header);padding:0 max(24px,calc((100% - 1280px)/2));background:rgba(248,246,239,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);color:var(--forest);transition:transform .45s cubic-bezier(.2,.7,.2,1),background-color .35s,color .35s,border-color .35s}
+.site-header.is-hidden{transform:translateY(-100%)}
+.site-header.is-over{background:transparent;border-color:transparent;color:var(--ivory);-webkit-backdrop-filter:none;backdrop-filter:none}
+.site-header .brand img{width:40px;height:40px;border-radius:11px}
+.site-header .brand strong{font-family:var(--display);font-weight:400;font-size:21px;letter-spacing:-.02em}
+.site-header .brand small{font-size:11px;letter-spacing:.06em;opacity:.8}
+.site-header nav{gap:34px;font-size:14.5px}
+.site-header .head-cta{min-height:42px;padding:9px 20px;background:transparent;color:inherit;border-color:currentColor;border-radius:40px;font-weight:500}
+.site-header .head-cta:hover{background:var(--forest);border-color:var(--forest);color:var(--ivory)}
+.site-header.is-over .head-cta:hover{background:var(--ivory);border-color:var(--ivory);color:var(--forest)}
+body:not(.home) main{padding-top:var(--header)}
+html{scroll-padding-top:24px}
+
+/* Ouverture : le relief porte le titre */
+.home .relief-copy{width:min(620px,calc(100% - 40px))}
+.relief-copy a{pointer-events:auto}
+.relief-steps li{transition:opacity .6s ease,transform .6s ease,visibility .6s}
+.relief-steps li:not([data-active]){visibility:hidden}
+.relief-steps li.relief-intro{border-left:0;padding-left:0;max-width:none}
+.relief-steps .relief-intro h2{font-size:clamp(2.6rem,4.6vw,4.6rem);color:var(--ivory);margin:0}
+.relief-intro p{margin-top:24px;max-width:440px;font-size:17px}
+.relief-steps h2{font-size:clamp(1.8rem,2.6vw,2.4rem);line-height:1.1;margin-bottom:12px}
+.relief-scroll{position:absolute;z-index:2;left:50%;bottom:22px;transform:translateX(-50%);margin:0;font-size:12.5px;color:#cfd8cc;transition:opacity .5s}
+.relief-home:has(.relief-intro:not([data-active])) .relief-scroll,.relief-home.is-static .relief-scroll,.relief-home.is-fallback .relief-scroll{opacity:0}
+.relief-home.is-static .relief-steps li,.relief-home.is-fallback .relief-steps li{visibility:visible}
+.relief-home.is-static .relief-copy,.relief-home.is-fallback .relief-copy{padding-block:calc(var(--header) + 40px) 60px}
+
+/* Ouverture : titre puis façade bord à bord */
+.opening{padding:calc(var(--header) + clamp(48px,7vw,104px)) 0 0}
+.opening-layout{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,4fr);gap:clamp(32px,5vw,80px);align-items:end}
+.opening-title .location{color:var(--muted);margin-bottom:22px}
+.opening-title h1{font-size:clamp(3.2rem,7vw,7.2rem)}
+.opening-text p{max-width:400px;color:var(--muted);font-size:18px}
+.opening-text .hero-actions{margin-top:30px}
+.opening-media{margin:clamp(48px,6vw,88px) 0 0}
+.opening-media .frame{height:clamp(420px,78vh,860px);border-radius:0}
+
+/* Cadres photo et profondeur */
+.frame{overflow:hidden;border-radius:2px;background:var(--sage)}
+.frame img{width:100%;height:100%;object-fit:cover;transform:translate3d(0,var(--shift,0px),0) scale(1.08);will-change:transform}
+
+/* La maison */
+.house{padding:clamp(96px,12vw,170px) 0}
+.house-intro{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,5fr);gap:clamp(40px,6vw,104px);align-items:center}
+.house-media{margin:0}
+.house-media .frame{aspect-ratio:4/3}
+.house-media figcaption{margin-top:14px;font-size:13.5px;color:var(--muted)}
+.house-text h2{font-size:clamp(2.3rem,3.6vw,3.8rem)}
+.house-text>p{margin-top:24px;color:var(--muted)}
+.facts{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px 28px;margin:40px 0 8px;padding-top:4px;border-top:1px solid var(--line)}
+.facts div{display:flex;flex-direction:column-reverse;gap:2px;padding-top:18px}
+.facts dt{font-size:13px;color:var(--muted)}
+.facts dd{margin:0;font-family:var(--display);font-size:clamp(1.6rem,2.1vw,2rem);font-weight:350;letter-spacing:-.02em;color:var(--forest);white-space:nowrap}
+.house-text .value-note{margin-top:28px;color:var(--ink);font-family:var(--display);font-size:1.15rem;line-height:1.45;padding-left:0;border:0}
+
+/* Galerie */
+.gallery{padding:clamp(96px,11vw,160px) 0}
+.gallery .filters button{border-color:var(--line)}
+.gallery-item img{border-radius:2px}
 .gallery-grid{grid-auto-flow:dense;grid-auto-rows:220px;gap:18px}
-.gallery-item{display:flex;flex-direction:column;min-height:0}
-.gallery-item img{flex:1;height:auto;min-height:0;border-radius:6px;transition:filter .25s,transform .6s cubic-bezier(.2,.7,.2,1)}
-.gallery-item{overflow:hidden}
-.gallery-item:hover img{transform:scale(1.025)}
-.gallery-item span{flex:none}
+.gallery-item{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.gallery-item img{flex:1;height:auto;min-height:0;transition:filter .25s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.gallery-item:hover img{transform:scale(1.03);filter:none}
+.gallery-item span{flex:none;color:var(--muted)}
 .gallery-grid .gallery-item:nth-child(5n+1){grid-row:span 2}
 .gallery-grid .gallery-item:nth-child(7n+4){grid-column:span 2}
-.gpx-layout{grid-template-columns:1fr}
-.reveal{opacity:0;transform:translateY(24px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
-.reveal.is-visible{opacity:1;transform:none}
-@media(max-width:800px){.gallery-grid{grid-auto-rows:170px}.gallery-grid .gallery-item:nth-child(7n+4){grid-column:span 2}.stats strong{font-size:28px}}
-@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
+
+/* Randonnée */
+.walk{padding:0 0 clamp(96px,11vw,160px)}
+.walk-layout{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:clamp(40px,7vw,120px);align-items:center}
+.walk-media .frame{aspect-ratio:4/5}
+.walk-text p{margin:24px 0 32px;color:var(--muted)}
+
+/* Clôture */
+.closing{padding:clamp(80px,9vw,130px) 0;border-top:1px solid var(--line)}
+.closing-layout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(32px,6vw,96px);align-items:end}
+.closing-layout p{margin-bottom:28px;color:var(--muted)}
+
+/* Panneau de réservation */
+.booking-panel{position:fixed;inset:0 0 0 auto;margin:0;padding:0;width:min(660px,100vw);max-width:100vw;height:100dvh;max-height:none;border:0;border-radius:0;background:var(--ivory);overflow:auto;overscroll-behavior:contain;box-shadow:-30px 0 60px rgba(16,37,28,.12)}
+.booking-panel[open]{animation:panel-in .5s cubic-bezier(.2,.7,.2,1)}
+.booking-panel::backdrop{background:rgba(16,37,28,.42)}
+@keyframes panel-in{from{transform:translateX(48px);opacity:0}}
+.panel-head{position:sticky;top:0;z-index:3;display:flex;justify-content:space-between;align-items:start;gap:20px;padding:28px 36px 22px;background:var(--ivory);border-bottom:1px solid var(--line)}
+.panel-head h2{font-size:2rem;letter-spacing:-.02em}
+.panel-head p{margin-top:6px;font-size:14px;color:var(--muted)}
+.panel-close{flex:none;min-height:44px;padding:8px 16px;border:1px solid var(--line);border-radius:40px;background:transparent;color:var(--forest);font-size:14px}
+.panel-close:hover{border-color:var(--forest)}
+#reserver.booking-panel .form-card{padding:28px 36px 56px;background:transparent;border-radius:0}
+#reserver.booking-panel .booking-form-layout{grid-template-columns:1fr;gap:40px}
+#reserver.booking-panel .package-option strong{font-size:24px}
+#reserver.booking-panel .package-option{padding:20px}
+#reserver.booking-panel .package-option:has(input:checked){padding:19px}
+body:has(.booking-panel[open]){overflow:hidden}
+
+.reveal{opacity:0;transition:opacity 1.1s ease}
+.reveal.is-visible{opacity:1}
+
+@media(max-width:1100px){.wrap{width:calc(100% - 48px)}.site-header nav{gap:20px}}
+@media(max-width:800px){
+  :root{--header:64px}
+  .wrap{width:calc(100% - 40px)}
+  .site-header{height:var(--header);padding:0 20px}
+  .site-header .brand img{width:36px;height:36px}
+  .mobile-nav>div{top:var(--header);color:var(--forest)}
+  .opening-layout,.house-intro,.walk-layout,.closing-layout{grid-template-columns:1fr}
+  .opening{padding-top:calc(var(--header) + 32px)}
+  .opening-title h1{font-size:3.1rem}
+  .opening-layout{gap:20px}
+  .opening-media .frame{height:62vh;min-height:360px}
+  .house-media .frame{aspect-ratio:4/3}
+  .facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gallery-grid{grid-auto-rows:170px}
+  .walk-media .frame{aspect-ratio:1/1}
+  .relief-steps .relief-intro h2{font-size:2.4rem}
+  .relief-intro p{font-size:16px;margin-top:16px}
+  .relief-steps h2{font-size:1.7rem}
+  .relief-scroll{display:none}
+  .panel-head{padding:20px 20px 16px}
+  #reserver.booking-panel .form-card{padding:22px 20px 48px}
+}
+@media(prefers-reduced-motion:reduce){.frame img{transform:none}.reveal{opacity:1}.booking-panel[open]{animation:none}.site-header{transition:none}}
+@media(max-width:520px){#reserver.booking-panel .package-options{grid-template-columns:1fr;gap:10px}#reserver.booking-panel .package-option strong{font-size:21px}}
