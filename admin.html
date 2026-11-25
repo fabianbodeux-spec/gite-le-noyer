@@ -35,6 +35,7 @@
       <nav class="erp-nav">
         <span class="nav-label">Maison</span>
         <a href="#dashboard" data-erp-nav="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Vue d’ensemble</a>
+        <a href="#dossiers" data-erp-nav="dossiers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>Dossiers</a>
         <a href="#reservations" data-erp-nav="reservations"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Réservations externes</a>
         <a href="#site-requests" data-erp-nav="site-requests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4z"/></svg>Demandes du site</a>
         <a href="#cleaning" data-erp-nav="cleaning"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M5 21h14M7 21l1-9h8l1 9M9 12V8h6v4"/></svg>Accueil & ménage</a>
@@ -42,7 +43,7 @@
         <a href="#pricing" data-erp-nav="pricing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 7a7 7 0 1 0 0 10M4 10h10M4 14h10"/></svg>Tarifs du site</a>
         <a href="#availability" data-erp-nav="availability"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Disponibilités</a>
       </nav>
-      <div class="erp-sidebar-bottom"><a href="/">← Retour au site public</a><button id="logout" type="button" class="sidebar-logout">Fermer la gestion</button></div>
+      <div class="erp-sidebar-bottom"><button id="download-backup" type="button" class="sidebar-backup">Télécharger une sauvegarde</button><a href="/">← Retour au site public</a><button id="logout" type="button" class="sidebar-logout">Fermer la gestion</button></div>
     </aside>
 
     <main id="erp-content" class="erp-main" tabindex="-1">
@@ -59,6 +60,11 @@
         <div id="today-content" class="dashboard-grid"></div>
       </section>
 
+      <section id="dossiers-page" class="erp-page" data-erp-page="dossiers" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Chaque séjour, de la demande au ménage. Les dossiers du site et des plateformes sont réunis ; cliquez sur une carte pour ouvrir sa fiche.</p>
+        <section class="dossier-today" aria-labelledby="dossier-today-title"><h2 id="dossier-today-title">À faire</h2><div id="dossier-actions" class="dossier-actions"></div></section>
+        <div id="dossier-board" class="dossier-board" aria-label="Dossiers par étape"></div>
+      </section>
       <section id="reservations-page" class="erp-page" data-erp-page="reservations" aria-labelledby="page-title" hidden>
         <div class="page-heading"><div><p class="page-intro">Valide les dates, prépare l’arrivée et le ménage. Le paiement et les échanges client restent gérés par la plateforme.</p></div><button type="button" id="add-platform-booking" class="btn">Ajouter une réservation</button></div>
         <details id="new-inquiry" class="erp-form-panel">
@@ -99,6 +105,15 @@
 
       <section id="pricing-page" class="erp-page" data-erp-page="pricing" aria-labelledby="page-title" hidden>
         <p class="page-intro">Les tarifs du site public uniquement. Les plateformes externes gèrent leurs propres prix.</p>
+        <section class="erp-subpanel payment-rules" aria-labelledby="settings-title"><h2 id="settings-title">Règles de paiement et de suivi</h2><p>L’acompte n’est pas remboursable et bloque les dates dès sa réception. Le solde est dû avant l’arrivée. Ces règles s’appliquent aux devis, aux messages et aux échéances des dossiers.</p>
+          <form id="settings-form" class="erp-form-grid settings-grid">
+            <label>Acompte (% du séjour)<input name="deposit_percent" type="number" min="1" max="100" step="1" required></label>
+            <label>Solde dû (jours avant l’arrivée)<input name="balance_days" type="number" min="0" max="365" step="1" required></label>
+            <label>Réponse à une demande (heures)<input name="quote_hours" type="number" min="1" max="720" step="1" required></label>
+            <label>Informations d’accès (jours avant)<input name="access_days" type="number" min="0" max="60" step="1" required></label>
+            <div class="settings-actions"><button class="btn" type="submit">Enregistrer les règles</button><span id="settings-status" role="status" aria-live="polite"></span></div>
+          </form>
+        </section>
         <p id="rates-warning" class="workspace-warning"></p>
         <div class="pricing-layout">
           <section class="erp-subpanel"><h2>Ajouter une période</h2><p>Deux forfaits, selon la date d’arrivée. La période de fin est exclue.</p>

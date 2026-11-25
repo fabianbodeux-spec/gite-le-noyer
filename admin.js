@@ -58,6 +58,18 @@
       throw error;
     } finally {clearTimeout(timeout)}
   }
+  // Sauvegarde complète de la base, téléchargée avec la clé propriétaire.
+  element('download-backup')?.addEventListener('click',async event=>{
+    const trigger=event.currentTarget;trigger.disabled=true;
+    try{
+      const response=await fetch('/api/admin/backup',{headers:{Authorization:'Bearer '+token}});
+      if(!response.ok)throw Error(response.status===401?'Clé refusée : reconnectez-vous.':'Sauvegarde impossible (HTTP '+response.status+').');
+      const blob=await response.blob();const link=document.createElement('a');
+      link.href=URL.createObjectURL(blob);link.download='le-noyer-sauvegarde-'+today+'.sqlite3';
+      document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),2000);
+      announce('Sauvegarde téléchargée : conservez ce fichier en lieu sûr.');
+    }catch(error){announce(error.message)}finally{trigger.disabled=false}
+  });
   function text(parent, tag, content) {const node=document.createElement(tag);node.textContent=content;parent.append(node);return node}
   function action(parent, label, callback) {
     const button=text(parent,'button',label);button.type='button';

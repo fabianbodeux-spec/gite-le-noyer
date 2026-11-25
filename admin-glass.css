@@ -136,3 +136,51 @@
 @media(min-width:761px){.erp-body .erp-shell{grid-template-columns:276px minmax(0,1fr)}}
 .erp-body .erp-nav a{white-space:nowrap;font-size:13.5px}
 .erp-body .erp-nav a,.erp-body .erp-nav a[aria-current]{text-decoration:none}
+
+/* Dossiers : file d'actions et tableau par étape */
+.erp-body .dossier-today{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;margin:0 0 20px;padding:16px 18px;background:var(--glass);border:1px solid var(--edge);border-radius:var(--r-lg);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%)}
+.erp-body .dossier-today h2{margin:0;font:350 20px/1.2 var(--display)}
+.erp-body .dossier-actions{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.erp-body .dossier-action{display:grid;gap:2px;text-align:left;padding:11px 14px 11px 30px;border-radius:var(--r-md);border:1px solid var(--edge);background:rgba(0,0,0,.16);color:var(--g-ink);cursor:pointer;position:relative;font:inherit}
+.erp-body .dossier-action::before{content:"";position:absolute;left:13px;top:17px;width:8px;height:8px;border-radius:50%;background:var(--g-amber)}
+.erp-body .dossier-action.is-late::before{background:var(--g-rose)}
+.erp-body .dossier-action strong{font-size:13.5px}
+.erp-body .dossier-action span{font-size:12.5px;color:var(--g-muted)}
+.erp-body .dossier-action:hover{border-color:var(--edge-hi);background:var(--glass-hi)}
+.erp-body .dossier-calm{margin:0;color:var(--g-muted);font-size:14px}
+.erp-body .dossier-board{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:14px;overflow-x:auto;padding:16px;background:var(--glass);border:1px solid var(--edge);border-radius:var(--r-lg);-webkit-backdrop-filter:blur(22px) saturate(140%);backdrop-filter:blur(22px) saturate(140%)}
+.erp-body .dossier-col{display:grid;align-content:start;gap:10px;min-width:0}
+.erp-body .dossier-col-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.erp-body .dossier-col-head h3{margin:0;font:600 13.5px var(--sans);color:var(--g-muted)}
+.erp-body .dossier-count{font-weight:600;color:var(--g-ink);font-variant-numeric:tabular-nums}
+.erp-body .dossier-hint{margin:-6px 0 4px;color:var(--g-faint);font-size:12px}
+.erp-body .dossier-empty{margin:0;padding:14px;border:1px dashed var(--edge);border-radius:var(--r-md);color:var(--g-faint);font-size:12.5px;text-align:center}
+.erp-body .dossier-card{display:grid;gap:8px;text-align:left;padding:13px 14px;border-radius:var(--r-md);border:1px solid var(--edge);background:rgba(240,238,228,.07);color:var(--g-ink);cursor:pointer;font:inherit;transition:border-color .2s,background .2s}
+.erp-body .dossier-card:hover{border-color:var(--edge-hi);background:rgba(240,238,228,.11)}
+.erp-body .dossier-top,.erp-body .dossier-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.erp-body .dossier-top strong{font-size:13.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.erp-body .dossier-src{flex:none;font-size:11px;padding:2px 7px;border-radius:6px;background:var(--glass-hi);color:var(--g-muted)}
+.erp-body .dossier-meta{font-size:12px;color:var(--g-muted)}
+.erp-body .dossier-bar{display:block;height:5px;border-radius:5px;background:rgba(240,238,228,.1);overflow:hidden}
+.erp-body .dossier-bar i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--g-sage),#b9e0c6)}
+.erp-body .dossier-next{font-size:12px;color:var(--g-copper);min-width:0}
+.erp-body .dossier-next.is-soon{color:var(--g-amber)}
+.erp-body .dossier-next.is-late{color:var(--g-rose)}
+.erp-body .dossier-amount{flex:none;font-family:var(--display);font-size:15px;white-space:nowrap}
+
+/* Règles de paiement */
+.erp-body .payment-rules{margin-bottom:20px}
+.erp-body .payment-rules>p{max-width:70ch}
+.erp-body .settings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:end;margin-top:14px}
+.erp-body .settings-actions{grid-column:1/-1;display:flex;align-items:center;gap:14px}
+.erp-body #settings-status{color:var(--g-muted);font-size:13px}
+.erp-body .sidebar-backup{display:block;margin:0 0 10px;padding:8px 10px;width:100%;text-align:left;border:1px solid var(--edge);border-radius:var(--r-sm);background:var(--glass);color:var(--g-ink);font:500 13px var(--sans);cursor:pointer}
+.erp-body .sidebar-backup:hover{background:var(--glass-hi)}
+@media(max-width:1100px){.erp-body .settings-grid{grid-template-columns:1fr 1fr}.erp-body .dossier-today{grid-template-columns:1fr}}
+@media(max-width:600px){.erp-body .settings-grid{grid-template-columns:1fr}}
+.erp-body .dossier-col{grid-template-columns:minmax(0,1fr)}
+.erp-body .dossier-card{min-width:0;width:100%}
+.erp-body .dossier-foot{align-items:flex-end}
+.erp-body .dossier-next{flex:1}
+.erp-body .dossier-card{grid-template-columns:minmax(0,1fr);overflow:hidden}
+.erp-body .dossier-top,.erp-body .dossier-foot{min-width:0}

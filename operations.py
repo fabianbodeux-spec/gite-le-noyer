@@ -70,6 +70,7 @@ def initialize_operations(connection):
         booking_id INTEGER NOT NULL REFERENCES demandes(id),
         amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
         method TEXT NOT NULL, reference TEXT, verified_at TEXT NOT NULL)''')
+    connection.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     connection.execute('''CREATE UNIQUE INDEX IF NOT EXISTS payment_reference
         ON booking_payments(booking_id,reference) WHERE reference IS NOT NULL''')
     connection.execute('''INSERT INTO booking_timeline(booking_id,event_type,actor,details,created_at)
@@ -77,6 +78,34 @@ def initialize_operations(connection):
                json_object('existing_status',demandes.status,'record_created_at',demandes.created_at),?
         FROM demandes WHERE NOT EXISTS (
             SELECT 1 FROM booking_timeline WHERE booking_timeline.booking_id=demandes.id)''', (event_time(),))
+
+
+# Règles de paiement et de suivi, modifiables dans l'espace propriétaire.
+SETTINGS_DEFAULTS = {'deposit_percent': 30, 'balance_days': 45, 'quote_hours': 24, 'access_days': 7}
+SETTINGS_LIMITS = {'deposit_percent': (1, 100), 'balance_days': (0, 365), 'quote_hours': (1, 720), 'access_days': (0, 60)}
+
+
+def read_settings(connection):
+    values = dict(SETTINGS_DEFAULTS)
+    for row in connection.execute('SELECT key,value FROM settings'):
+        if row['key'] in values:
+            try:
+                values[row['key']] = int(row['value'])
+            except ValueError:
+                pass
+    return values
+
+
+def payment_plan(total_cents, arrival, settings):
+    """Acompte non remboursable qui bloque les dates, solde dû N jours avant l'arrivée."""
+    deposit = min(total_cents, (total_cents * settings['deposit_percent'] + 99) // 100)
+    due = (parse_date(arrival) - timedelta(days=settings['balance_days'])).isoformat()
+    return {'deposit_percent': settings['deposit_percent'], 'deposit_cents': deposit,
+            'balance_due': due, 'balance_days': settings['balance_days']}
+
+
+def euros(cents):
+    return f"{cents/100:.2f}".replace('.', ',')
 
 
 def preview_email(text):
@@ -225,6 +254,7 @@ class Operations:
         today = date.today().isoformat()
         horizon = (date.today()+timedelta(days=14)).isoformat()
         with self.store.connection() as connection:
+            settings = read_settings(connection)
             rows = [dict(row) for row in connection.execute('''SELECT demandes.*,
                 COALESCE(workflow.source,'direct') AS source, workflow.reference,
                 COALESCE(workflow.notes,'') AS notes, COALESCE(workflow.cleaning_note,'') AS cleaning_note,
@@ -257,6 +287,7 @@ class Operations:
                     row['total_cents'] = None
                     row['has_quote'] = False
                 row['paid_cents']=sum(payment['amount_cents'] for payment in row['payments'])
+                row['payment_plan']=payment_plan(row['total_cents'],row['arrival'],settings) if row['total_cents'] else None
                 row['balance_cents']=max(0,row['total_cents']-row['paid_cents']) if row['total_cents'] is not None else None
                 if row['external']:
                     row['payment_status']='external'
@@ -290,7 +321,7 @@ class Operations:
                              'requested': row['departure'] in cleaning_notifications.get(row['id'], set()),
                              'received': bool(row.get('cleaning_received_at')),
                              'received_at': row.get('cleaning_received_at')})
-        return {'today': today,
+        return {'today': today, 'settings': settings,
                 'pending': [row['id'] for row in rows if row['status'] == 'pending' and row['departure'] > today],
                 'arrivals': [row['id'] for row in confirmed if row['arrival'] == today],
                 'departures': [row['id'] for row in confirmed if row['departure'] == today],
@@ -361,6 +392,36 @@ class Operations:
                     record_event(connection, identifier, 'cleaning_completed_by_team', 'cleaner', {'departure': row['departure']})
         return {'ok': True, 'action': action}
 
+    def settings(self):
+        with self.store.connection() as connection:
+            return read_settings(connection)
+
+    def update_settings(self, data):
+        if not isinstance(data, dict):
+            raise BookingError('Paramètres invalides.')
+        values = {}
+        for key, (low, high) in SETTINGS_LIMITS.items():
+            if key in data:
+                values[key] = integer(data.get(key), low, high, {'deposit_percent': 'Acompte (%)', 'balance_days': 'Délai du solde (jours)',
+                    'quote_hours': 'Délai de réponse (heures)', 'access_days': 'Envoi des informations d’accès (jours)'}[key])
+        if not values:
+            raise BookingError('Aucun paramètre à enregistrer.')
+        with self.store.connection(True) as connection:
+            for key, value in values.items():
+                connection.execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, str(value)))
+            return read_settings(connection)
+
+    def backup(self):
+        """Copie cohérente de toute la base, même pendant une écriture."""
+        source = sqlite3.connect(self.store.path, timeout=15)
+        target = sqlite3.connect(':memory:')
+        try:
+            source.backup(target)
+            return target.serialize()
+        finally:
+            source.close()
+            target.close()
+
     def bulk_rates(self, data):
         identifiers = data.get('ids')
         if not isinstance(identifiers, list) or not 1 <= len(identifiers) <= 100:
@@ -418,7 +479,8 @@ class Operations:
                     'payment_id':payment_id,'amount_cents':amount,'method':method,'reference':reference,
                     'paid_total_cents':total_paid,'balance_cents':max(0,total-total_paid),'fully_paid':total_paid>=total})
                 reservation_confirmed=row['status']=='confirmed'
-                if total_paid>=total and row['status']=='pending':
+                plan=payment_plan(total,row['arrival'],read_settings(connection))
+                if total_paid>=plan['deposit_cents'] and row['status']=='pending':
                     try:
                         stay_package(parse_date(row['arrival']),parse_date(row['departure']),quote.get('package'))
                         dates_valid=True
@@ -427,7 +489,7 @@ class Operations:
                     if dates_valid and not self.store.unavailable(connection,row['arrival'],row['departure'],identifier):
                         connection.execute("UPDATE demandes SET status='confirmed' WHERE id=? AND status='pending'",(identifier,))
                         record_event(connection,identifier,'reservation_confirmed','system',
-                            {'source':'direct','trigger':'full_payment_validated','payment_id':payment_id})
+                            {'source':'direct','trigger':'full_payment_validated' if total_paid>=total else 'deposit_validated','payment_id':payment_id})
                         reservation_confirmed=True
         except sqlite3.IntegrityError:
             raise BookingError('Cette référence de paiement existe déjà pour ce séjour.',409)
@@ -479,7 +541,13 @@ class Operations:
                 charges=f"{quote.get('charges_cents', 0)/100:.2f}".replace('.', ',')
                 body += f"Détail : hébergement {lodging} €, ménage {cleaning} €, charges fixes de saison {charges} €.\n"
                 body += ('Le tarif mid-week est ajusté à la durée du séjour (référence quatre nuits).\n' if quote.get('package')=='midweek' else 'Le tarif week-end est fixe quelle que soit la durée autorisée.\n')
-                body += 'Cette proposition reste soumise à confirmation. Aucun paiement n’est enregistré par ce message.'
+                plan = payment_plan(row['total_cents'], row['arrival'], read_settings(connection))
+                balance_amount = euros(row['total_cents'] - plan['deposit_cents'])
+                body += (f"\nPour réserver, un acompte de {plan['deposit_percent']} %, soit {euros(plan['deposit_cents'])} €, bloque vos dates dès sa réception. "
+                         f"Cet acompte n’est pas remboursable.\n")
+                if row['total_cents'] > plan['deposit_cents']:
+                    body += f"Le solde de {balance_amount} € est à régler au plus tard le {date_text(plan['balance_due'])}, {plan['balance_days']} jours avant votre arrivée.\n"
+                body += 'Aucun paiement n’est enregistré par ce message.'
                 subject = 'Votre proposition de séjour au Noyer'
             elif kind == 'payment':
                 payment=connection.execute('SELECT * FROM booking_payments WHERE booking_id=? AND (? IS NULL OR id=?) ORDER BY id DESC LIMIT 1',
@@ -497,7 +565,7 @@ class Operations:
                 charges=f"{quote.get('charges_cents', 0)/100:.2f}".replace('.', ',')
                 body+=f"Détail du séjour : hébergement {lodging} €, ménage {cleaning} €, charges fixes de saison {charges} €.\n"
                 body+=f"Montant reçu à ce jour : {received} €.\n"
-                body+=('Le montant du séjour est intégralement réglé. ' if balance==0 else f"Solde restant : {balance/100:.2f} €. ".replace('.',',') )
+                body+=('Le montant du séjour est intégralement réglé. ' if balance==0 else f"Solde restant : {euros(balance)} €.\n")
                 if row['status']=='confirmed' and balance==0:
                     body+='Votre réservation est confirmée.\n'
                     body+=arrival_access_text(row['arrival'],row['departure'],row['arrival_time'],row['departure_time'])
@@ -505,7 +573,10 @@ class Operations:
                     includes_confirmation=True
                     includes_arrival=True
                 elif row['status']=='confirmed':
-                    body+='Votre réservation reste confirmée. Nous vous transmettrons les informations d’arrivée dans le courriel de confirmation du règlement intégral.'
+                    plan=payment_plan(row['total_cents'],row['arrival'],read_settings(connection))
+                    body+=(f"Votre acompte est bien reçu : vos dates sont bloquées. Cet acompte n’est pas remboursable.\n"
+                           f"Le solde est à régler au plus tard le {date_text(plan['balance_due'])}, {plan['balance_days']} jours avant votre arrivée. "
+                           'Nous vous transmettrons les informations d’arrivée avec la confirmation du règlement intégral.')
                     subject='Confirmation de réception de paiement — Le Noyer'
                 else:
                     body+='Les dates restent en attente de confirmation du propriétaire.'

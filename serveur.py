@@ -129,6 +129,12 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                 if url.path == '/api/admin/workspace':
                     self.authorize()
                     return self.respond(200, operations.workspace(params.get('year', [str(date.today().year)])[0]))
+                if url.path == '/api/admin/settings':
+                    self.authorize()
+                    return self.respond(200, operations.settings())
+                if url.path == '/api/admin/backup':
+                    self.authorize()
+                    return self.respond(200, operations.backup(), 'application/vnd.sqlite3')
                 if url.path == '/api/cleaning/workspace':
                     self.authorize_cleaner()
                     return self.respond(200, operations.cleaning_workspace())
@@ -172,6 +178,8 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     return self.respond(200, preview_email(data.get('text')))
                 if path == '/api/admin/external':
                     return self.respond(201, operations.add_inquiry(data))
+                if path == '/api/admin/settings':
+                    return self.respond(200, operations.update_settings(data))
                 if path == '/api/admin/rates/bulk':
                     return self.respond(200, operations.bulk_rates(data))
                 match = re.fullmatch(r'/api/cleaning/tasks/(\d+)/(received|complete)', path)

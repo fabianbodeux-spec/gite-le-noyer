@@ -194,7 +194,7 @@
     notice('Transmission des consignes déclarée et inscrite dans l’historique.');
   }
   function showPage(page,updateUrl=false) {
-    const titles={dashboard:'Vue d’ensemble',reservations:'Réservations externes','site-requests':'Demandes du site',cleaning:'Accueil & ménage',pricing:'Tarifs du site',availability:'Disponibilités'};
+    const titles={dashboard:'Vue d’ensemble',dossiers:'Dossiers',reservations:'Réservations externes','site-requests':'Demandes du site',cleaning:'Accueil & ménage',pricing:'Tarifs du site',availability:'Disponibilités'};
     if(!titles[page])page='dashboard';
     const changed=activePage!==page;activePage=page;
     document.querySelectorAll('[data-erp-page]').forEach(panel=>{panel.hidden=panel.dataset.erpPage!==page});
@@ -207,7 +207,7 @@
     if(updateUrl&&location.hash!=='#'+page)history.pushState(null,'','#'+page);
   }
   function showRecord(row) {
-    showPage(row.source==='direct'?'site-requests':'reservations',true);
+    if(activePage!=='dossiers')showPage(row.source==='direct'?'site-requests':'reservations',true);
     const dialog=element('record-dialog'),content=element('record-content');content.replaceChildren();
     const actionFeedback=text(content,'p','');actionFeedback.id='record-action-feedback';actionFeedback.className='workspace-warning';actionFeedback.setAttribute('role','alert');actionFeedback.hidden=true;
     element('record-title').textContent=(row.name||sources[row.source]||'Séjour')+' · n° '+row.id;
@@ -427,13 +427,102 @@
       button(actions,'Copier la saison',()=>fillRate(rate),'table-action');button(actions,'Désactiver',async()=>{if(!window.confirm('Désactiver cette période tarifaire ?'))return;await api('rates/'+rate.id+'/deactivate',{});await refresh()},'table-action');row.append(actions);body.append(row);
     });table.append(body);parent.append(table);
   }
+  // Dossiers : étape, progression et prochaine échéance de chaque séjour.
+  const addDays=(value,days)=>{const d=new Date(value+'T12:00:00');d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)};
+  const timelineHas=(row,types)=>(row.timeline||[]).some(event=>types.includes(event.event_type));
+  function dossierState(row) {
+    const today=current.today,rules=current.settings||{deposit_percent:30,balance_days:45,quote_hours:24,access_days:7};
+    if(!['pending','confirmed'].includes(row.status))return null;
+    const cleaned=Boolean(row.checklist?.cleaning_done),started=row.arrival<=today;
+    if(row.departure<today&&(cleaned||row.status!=='confirmed'))return null;
+    const created=String(row.created_at||today).slice(0,10);
+    const replyDue=addDays(created,Math.ceil((rules.quote_hours||24)/24));
+    const steps=[],next={};
+    const set=(label,due,tone)=>{if(!next.label){next.label=label;next.due=due||null;next.tone=tone||null}};
+    let stage;
+    if(row.source!=='direct'){
+      steps.push(true,row.status==='confirmed',Boolean(row.checklist?.reception_ready),cleaned);
+      if(row.status==='pending'){stage='new';set('Valider les dates',replyDue)}
+      else if(!started){stage='before';if(!row.checklist?.reception_ready)set('Préparer l’accueil',addDays(row.arrival,-1));else set('Prêt pour l’arrivée')}
+      else{stage='stay';set('Valider le ménage',row.departure)}
+    } else {
+      const quoteSent=(row.timeline||[]).some(event=>event.event_type==='message_sent_manually'&&event.details?.kind==='quote')||timelineHas(row,['quote_marked_sent_manually','quote_email_sent']);
+      const plan=row.payment_plan,paid=Number(row.paid_cents||0),deposit=plan?plan.deposit_cents:0;
+      const depositOk=row.status==='confirmed'||(plan&&paid>=deposit);
+      const fullyPaid=row.has_quote&&Number(row.balance_cents||0)<=0&&paid>0;
+      const infoSent=timelineHas(row,['arrival_information_sent_manually','arrival_information_email_sent']);
+      steps.push(true,quoteSent||paid>0,depositOk,fullyPaid,infoSent,Boolean(row.checklist?.reception_ready),cleaned);
+      if(row.status==='pending'){
+        if(!row.has_quote){stage='new';set('Établir un devis',replyDue)}
+        else if(!quoteSent&&!paid){stage='new';set('Envoyer le devis',replyDue)}
+        else{stage='quote';set(paid?'Compléter l’acompte ('+money(deposit-paid)+')':'Attendre l’acompte ('+money(deposit)+')')}
+      } else if(!fullyPaid&&!started){
+        stage='deposit';
+        const late=plan&&today>plan.balance_due;
+        set(late?'Solde en retard ('+money(row.balance_cents)+'), l’acompte reste acquis':'Solde de '+money(row.balance_cents),plan?.balance_due);
+      } else if(!started){
+        stage='before';
+        if(!infoSent)set('Envoyer les informations d’arrivée',addDays(row.arrival,-(rules.access_days??7)));
+        else if(!row.checklist?.reception_ready)set('Préparer l’accueil',addDays(row.arrival,-1));
+        else set('Prêt pour l’arrivée');
+      } else {stage='stay';set('Valider le ménage',row.departure)}
+    }
+    const done=steps.filter(Boolean).length;
+    const tone=next.due?(next.due<today?'late':next.due<=addDays(today,2)?'soon':''):'';
+    return {stage,progress:Math.round(done/steps.length*100),next:next.label,due:next.due,tone};
+  }
+  const STAGES=[['new','Nouvelle demande','Réponse attendue'],['quote','Devis envoyé','En attente d’acompte'],['deposit','Acompte reçu','Dates bloquées, solde à venir'],['before','Avant l’arrivée','Informations, accueil'],['stay','Séjour et ménage','Jusqu’au ménage validé']];
+  function dueText(item){
+    if(!item.due)return '';
+    const days=daysUntil(item.due);
+    if(days<0)return 'en retard de '+(-days)+' j';
+    if(days===0)return 'aujourd’hui';
+    if(days===1)return 'demain';
+    return 'le '+dateLabel(item.due);
+  }
+  function renderDossiers(){
+    const board=element('dossier-board'),actions=element('dossier-actions');if(!board)return;
+    board.replaceChildren();actions.replaceChildren();
+    const items=current.records.map(row=>({row,state:dossierState(row)})).filter(item=>item.state);
+    STAGES.forEach(([key,label,hint])=>{
+      const col=document.createElement('section');col.className='dossier-col';
+      const list=items.filter(item=>item.state.stage===key).sort((a,b)=>(a.state.due||a.row.arrival).localeCompare(b.state.due||b.row.arrival));
+      const head=document.createElement('div');head.className='dossier-col-head';text(head,'h3',label);text(head,'span',String(list.length),'dossier-count');col.append(head);text(col,'p',hint,'dossier-hint');
+      if(!list.length)text(col,'p','Aucun dossier.','dossier-empty');
+      list.forEach(({row,state})=>{
+        const card=document.createElement('button');card.type='button';card.className='dossier-card';
+        const top=document.createElement('span');top.className='dossier-top';text(top,'strong',row.name||sources[row.source]);text(top,'span',row.source==='direct'?'Site':sources[row.source],'dossier-src');card.append(top);
+        text(card,'span',dateLabel(row.arrival)+' → '+dateLabel(row.departure)+', '+row.guests+' pers.','dossier-meta');
+        const bar=document.createElement('span');bar.className='dossier-bar';const fill=document.createElement('i');fill.style.width=state.progress+'%';bar.append(fill);bar.setAttribute('aria-label',state.progress+' % du parcours');card.append(bar);
+        const foot=document.createElement('span');foot.className='dossier-foot';
+        text(foot,'span',state.next+(state.due?', '+dueText(state):''),'dossier-next'+(state.tone?' is-'+state.tone:''));
+        text(foot,'span',row.source==='direct'&&row.total_cents?money(row.total_cents):'Plateforme','dossier-amount');card.append(foot);
+        card.addEventListener('click',()=>showRecord(row));
+        col.append(card);
+      });
+      board.append(col);
+    });
+    const urgent=items.filter(item=>item.state.due&&item.state.due<=addDays(current.today,2)).sort((a,b)=>a.state.due.localeCompare(b.state.due));
+    if(!urgent.length)text(actions,'p','Rien d’urgent : aucune échéance dans les deux prochains jours.','dossier-calm');
+    urgent.slice(0,6).forEach(({row,state})=>{
+      const act=document.createElement('button');act.type='button';act.className='dossier-action is-'+(state.tone||'soon');
+      text(act,'strong',state.next);text(act,'span',(row.name||sources[row.source])+', '+dueText(state));
+      act.addEventListener('click',()=>showRecord(row));actions.append(act);
+    });
+    return urgent.length;
+  }
+  function renderSettings(){
+    const form=element('settings-form');if(!form||!current.settings||form.dataset.dirty==='true')return;
+    Object.entries(current.settings).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(input)input.value=value});
+  }
   // Compteurs du menu : mêmes règles que le tableau de bord.
-  function updateNavCounts() {
+  function updateNavCounts(urgentDossiers=0) {
     const future=row=>row.departure>current.today;
     const counts={
       reservations:current.records.filter(row=>future(row)&&((row.source!=='direct'&&row.status==='pending')||row.conflict)).length,
       'site-requests':current.records.filter(row=>future(row)&&row.source==='direct'&&row.status==='pending').length,
-      cleaning:(current.cleaning||[]).filter(task=>!task.done).length
+      cleaning:(current.cleaning||[]).filter(task=>!task.done).length,
+      dossiers:urgentDossiers||0
     };
     document.querySelectorAll('[data-erp-nav]').forEach(link=>{
       let badge=link.querySelector('.nav-count');
@@ -449,7 +538,8 @@
     if(lastYear!==state.year){selectedRates.clear();lastYear=state.year}
     selectedRates=new Set([...selectedRates].filter(id=>currentRates.some(rate=>rate.id===id)));
     renderToday();renderRecordLists();renderReception();renderCleaning();renderRates();
-    updateNavCounts();
+    const urgentDossiers=renderDossiers();renderSettings();
+    updateNavCounts(urgentDossiers);
     element('dashboard-date').textContent=dateInput(current.today);
     const missing=state.days.filter(day=>day.date>=current.today&&day.package&&day.state==='unpriced');
     element('rates-warning').textContent=missing.length?missing.length+' dates d’arrivée sans tarif pour '+state.year+'.':'Les dates d’arrivée disponibles ont un tarif pour '+state.year+'.';
@@ -457,6 +547,18 @@
   window.NoyerWorkspace={
     connect(client,reload) {
       api=client;refresh=reload;
+      const settingsForm=element('settings-form');
+      if(settingsForm){
+        settingsForm.addEventListener('input',()=>{settingsForm.dataset.dirty='true'});
+        settingsForm.addEventListener('submit',async event=>{
+          event.preventDefault();const status=element('settings-status');const submit=settingsForm.querySelector('button[type=submit]');submit.disabled=true;status.textContent='';
+          try{
+            const data=Object.fromEntries([...new FormData(settingsForm)].map(([key,value])=>[key,Number(value)]));
+            await api('settings',data);settingsForm.dataset.dirty='false';await refresh();
+            status.textContent='Règles enregistrées.';notice('Règles de paiement enregistrées. Les nouveaux devis et échéances les utilisent.');
+          }catch(error){status.textContent=error.message}finally{submit.disabled=false}
+        });
+      }
       // Les messages d'état deviennent des notifications qui s'effacent seules.
       const status=element('erp-status');let statusTimer=0;
       new MutationObserver(()=>{clearTimeout(statusTimer);if(status.textContent.trim())statusTimer=setTimeout(()=>{status.textContent=''},6000)}).observe(status,{childList:true,characterData:true,subtree:true});
