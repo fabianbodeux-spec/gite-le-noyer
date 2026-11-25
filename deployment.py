@@ -28,13 +28,13 @@ def create_application(root=ROOT):
     def application(environ, start_response):
         response = []
 
-        def respond(status, body, mime='application/json; charset=utf-8'):
+        def respond(status, body, mime='application/json; charset=utf-8', cache='no-store'):
             if isinstance(body, dict):
                 body = json.dumps(body, ensure_ascii=False).encode()
             elif isinstance(body, str):
                 body = body.encode()
             headers = [('Content-Type', mime), ('Content-Length', str(len(body))),
-                       ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff'),
+                       ('Cache-Control', cache), ('X-Content-Type-Options', 'nosniff'),
                        ('X-Frame-Options', 'DENY'), ('Referrer-Policy', 'same-origin')]
             start_response(f'{status} {HTTPStatus(status).phrase}', headers)
             response.append(b'' if environ['REQUEST_METHOD'] == 'HEAD' else body)

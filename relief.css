@@ -1,0 +1,78 @@
+/* Le Noyer — relief 3D (accueil et randonnées) */
+.relief-home{position:relative;height:300vh;background:var(--forest);color:var(--ivory)}
+.relief-sticky{position:sticky;top:0;height:100vh;height:100svh;overflow:hidden}
+.relief-stage{position:absolute;inset:0;background:var(--forest)}
+.relief-stage canvas{display:block;width:100%;height:100%;opacity:0;transition:opacity 1.2s ease}
+.relief-stage.is-ready canvas{opacity:1}
+.relief-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45;transition:opacity .8s}
+.relief-stage.is-ready .relief-fallback{opacity:0;pointer-events:none}
+.relief-label{position:absolute;left:0;top:0;pointer-events:none;display:flex;flex-direction:column;gap:2px;padding:7px 11px 8px;margin:-64px 0 0 14px;border-radius:6px;background:rgba(16,37,28,.72);border:1px solid rgba(248,246,239,.22);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:var(--ivory);font-size:13px;line-height:1.25;white-space:nowrap;transition:opacity .3s}
+.relief-label strong{font-family:var(--display);font-weight:500;font-size:17px;letter-spacing:-.01em}
+.relief-label small{font-size:11.5px;letter-spacing:.04em;color:#cfd8cc}
+.relief-label.is-house{border-color:rgba(210,162,124,.8)}
+.relief-label.is-house strong{color:#f0cfb2}
+
+.relief-copy{position:absolute;z-index:2;left:max(48px,calc((100% - 1280px)/2));top:0;bottom:0;width:min(440px,calc(100% - 40px));display:flex;flex-direction:column;justify-content:center;pointer-events:none}
+.relief-copy .location{color:#cfd8cc;margin-bottom:18px}
+.relief-copy h2{font-size:clamp(2.4rem,4.4vw,4.4rem)}
+.relief-steps{list-style:none;margin:34px 0 0;padding:0;display:grid}
+.relief-steps li{grid-area:1/1;max-width:360px;padding-left:18px;border-left:2px solid var(--copper);opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+.relief-steps li[data-active]{opacity:1;transform:none}
+.relief-steps strong{display:block;font-family:var(--display);font-weight:400;font-size:1.45rem;line-height:1.2;margin-bottom:8px}
+.relief-steps p{color:#dbe4d6;font-size:16px}
+.relief-progress{display:flex;gap:6px;margin-top:28px}
+.relief-progress span{width:28px;height:2px;background:rgba(248,246,239,.25)}
+.relief-credit{position:absolute;z-index:2;right:24px;bottom:18px;max-width:420px;text-align:right;font-size:11.5px;color:#a9b9ab}
+.relief-sticky::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(24,54,40,.92) 0,rgba(24,54,40,.55) 34%,rgba(24,54,40,0) 60%)}
+
+/* Sans WebGL ou avec mouvement réduit : section compacte, tout le texte visible. */
+.relief-home.is-fallback,.relief-home.is-static{height:auto}
+.relief-home.is-fallback .relief-sticky,.relief-home.is-static .relief-sticky{position:relative;height:88vh;min-height:560px}
+.relief-home.is-fallback .relief-steps,.relief-home.is-static .relief-steps{gap:22px}
+.relief-home.is-fallback .relief-steps li,.relief-home.is-static .relief-steps li{grid-area:auto;opacity:1;transform:none}
+.relief-home.is-fallback .relief-progress,.relief-home.is-static .relief-progress{display:none}
+.relief-home.is-fallback .relief-fallback{opacity:.55}
+
+/* Randonnées */
+.relief-trail{margin-top:30px;display:grid;gap:18px}
+.relief-trail .relief-stage{position:relative;height:clamp(380px,58vh,600px);border-radius:12px;overflow:hidden;cursor:grab;touch-action:pan-y;outline-offset:4px}
+.relief-trail .relief-stage:active{cursor:grabbing}
+.relief-trail .relief-stage figure{position:absolute;inset:0;margin:0;display:grid;place-content:center;padding:24px;background:var(--sage)}
+.relief-trail .relief-stage.is-ready figure{display:none}
+.relief-hint{position:absolute;left:16px;bottom:14px;z-index:2;font-size:12px;color:#cfd8cc;pointer-events:none}
+.relief-tools{position:absolute;right:14px;top:14px;z-index:2;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.relief-tools button{min-height:40px;min-width:40px;padding:8px 14px;border-radius:30px;border:1px solid rgba(248,246,239,.35);background:rgba(16,37,28,.7);color:var(--ivory);font-size:13px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.relief-tools button:hover{background:rgba(16,37,28,.92)}
+.relief-trail:not(.has-profile) .relief-tools,.relief-trail:not(.has-profile) .relief-hint,.relief-trail:not(.has-profile) .relief-panel{display:none}
+.relief-panel{display:grid;grid-template-columns:auto 1fr;gap:30px;align-items:center;padding:20px 24px;border:1px solid var(--line);border-radius:12px;background:var(--white)}
+.relief-stats{display:flex;gap:26px}
+.relief-stats strong{display:block;font-size:19px;font-weight:600;color:var(--forest)}
+.relief-stats span{font-size:12.5px;color:var(--muted)}
+.relief-profile-wrap{position:relative}
+.relief-profile-wrap svg{display:block;width:100%;height:96px}
+.profile-area{fill:var(--sage)}
+.profile-line{fill:none;stroke:var(--forest);stroke-width:2;vector-effect:non-scaling-stroke}
+.profile-cursor{stroke:var(--copper);stroke-width:2.5;vector-effect:non-scaling-stroke}
+.relief-profile-wrap input[type=range]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
+.relief-profile-wrap:has(input:focus-visible){outline:3px solid var(--copper);outline-offset:4px;border-radius:4px}
+.relief-profile-wrap output{display:block;margin-top:6px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+@media(max-width:800px){
+  .relief-home{height:260vh}
+  .relief-copy{left:20px;top:auto;bottom:70px;justify-content:flex-end;width:calc(100% - 40px)}
+  .relief-copy h2{font-size:2.4rem}
+  .relief-steps{margin-top:20px}
+  .relief-steps p{font-size:15px}
+  .relief-sticky::after{background:linear-gradient(0deg,rgba(24,54,40,.95) 0,rgba(24,54,40,.7) 42%,rgba(24,54,40,0) 70%)}
+  .relief-credit{left:20px;right:20px;bottom:12px;text-align:left;font-size:10.5px}
+  .relief-home.is-fallback .relief-sticky,.relief-home.is-static .relief-sticky{height:auto;min-height:620px}
+  .relief-home.is-fallback .relief-copy,.relief-home.is-static .relief-copy{position:relative;padding:60px 0 90px}
+  .relief-panel{grid-template-columns:1fr;gap:16px;padding:18px}
+  .relief-stats{gap:18px;flex-wrap:wrap}
+  .relief-label{font-size:12px;padding:5px 9px 6px;margin-top:-56px}
+  .relief-label strong{font-size:15px}
+  .relief-tools{left:10px;right:10px;top:10px;justify-content:flex-start;gap:6px}
+  .relief-tools button{min-height:36px;min-width:36px;padding:6px 11px;font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){.relief-stage canvas,.relief-steps li{transition:none}}
+.relief-home.is-fallback .relief-credit{display:none}

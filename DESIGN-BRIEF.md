@@ -40,7 +40,8 @@ Créer et utiliser une identité cohérente :
 
 ## Restrictions
 - Pas de cabine infrarouge
-- Pas de visite 3D actuellement
+- Pas de visite 3D de la maison (la 3D est réservée au relief
+  réel de la vallée et aux tracés GPX, données sourcées)
 - Pas de faux avis, fausses disponibilités ou faux prix
 - Pas de cartes identiques répétées partout
 - Pas de défilement automatique décoratif

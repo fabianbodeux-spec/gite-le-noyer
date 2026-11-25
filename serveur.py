@@ -62,20 +62,24 @@ def load_cleaning_token(root=ROOT, create=False):
     return token
 
 
+mimetypes.add_type('font/woff2', '.woff2')
+STATIC_ASSETS = r'photos/[0-9]+\.jpg|vendor/three\.module\.min\.js|fonts/[a-z-]+\.woff2|relief/lienne\.bin'
+
+
 def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
     operations = Operations(store)
     cleaning_token = cleaner_token.strip()
     if cleaning_token and (len(cleaning_token) < 24 or any(character.isspace() for character in cleaning_token)):
         raise SystemExit('NOYER_CLEANING_TOKEN doit contenir au moins 24 caractères sans espace.')
     class Handler(BaseHTTPRequestHandler):
-        def respond(self, status, body, mime='application/json; charset=utf-8'):
+        def respond(self, status, body, mime='application/json; charset=utf-8', cache='no-store'):
             if isinstance(body, dict):
                 body = json.dumps(body, ensure_ascii=False).encode()
             elif isinstance(body, str):
                 body = body.encode()
             self.send_response(status)
             for name, value in {'Content-Type': mime, 'Content-Length': str(len(body)),
-                                'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+                                'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff',
                                 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin'}.items():
                 self.send_header(name, value)
             self.end_headers()
@@ -135,12 +139,14 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     return self.respond(200, store.calendar(params.get('year', [str(date.today().year)])[0], private))
                 path = unquote(url.path)
                 relative = {'/': 'index.html', '/admin': 'admin.html', '/equipe-menage': 'equipe-menage.html'}.get(path, path.lstrip('/'))
-                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css')
-                allowed = allowed or bool(re.fullmatch(r'photos/[0-9]+\.jpg|traces/promenade-12\.(gpx|geojson)', relative))
+                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css', 'relief.js', 'relief.css')
+                static_asset = bool(re.fullmatch(STATIC_ASSETS, relative))
+                allowed = allowed or static_asset or bool(re.fullmatch(r'traces/promenade-12\.(gpx|geojson)', relative))
                 target = (root / relative).resolve()
                 if not allowed or not target.is_relative_to(root.resolve()) or not target.is_file():
                     raise BookingError('Page introuvable.', 404)
-                return self.respond(200, target.read_bytes(), mimetypes.guess_type(str(target))[0] or 'application/octet-stream')
+                return self.respond(200, target.read_bytes(), mimetypes.guess_type(str(target))[0] or 'application/octet-stream',
+                                    'public, max-age=86400' if static_asset else 'no-store')
             except BookingError as error:
                 self.respond(error.status, {'error': str(error)})
             except (sqlite3.Error, OSError):
