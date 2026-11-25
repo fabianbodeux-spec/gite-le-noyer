@@ -5,7 +5,7 @@
   const date=value=>new Intl.DateTimeFormat('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(value+'T12:00:00'));
   const time=value=>value?value.slice(0,5).replace(':',' h '):'—';
   async function request(path,body) {
-    const response=await fetch(path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+accessKey,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+    const response=await fetch(path,{method:body?'POST':'GET',headers:{...(accessKey?{Authorization:'Bearer '+accessKey}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
     const result=await response.json();if(!response.ok)throw Error(result.error||'La demande n’a pas abouti.');return result;
   }
   function fact(parent,label,value){const item=document.createElement('div');item.className='fact';const title=document.createElement('span');title.textContent=label;const content=document.createElement('strong');content.textContent=value;item.append(title,content);parent.append(item)}
@@ -37,10 +37,26 @@
         card.append(actions);tasks.append(card);
       });
       $('plan-status').textContent='Planning actualisé.';
-    }catch(error){$('plan-status').textContent=error.message;if(error.message.includes('refusée'))logout()}
+    }catch(error){$('plan-status').textContent=error.message;if(/refusée|requise/.test(error.message))logout()}
   }
   async function update(button,id,action){button.disabled=true;try{await request('/api/cleaning/tasks/'+id+'/'+action,{});await refresh()}catch(error){$('plan-status').textContent=error.message;button.disabled=false}}
-  function logout(){accessKey='';keyInput.value='';planning.hidden=true;login.hidden=false;$('login-status').textContent='Accès fermé.'}
-  $('login-form').addEventListener('submit',async event=>{event.preventDefault();accessKey=keyInput.value.trim();$('login-status').textContent='Vérification de la clé…';try{await request('/api/cleaning/workspace');login.hidden=true;planning.hidden=false;keyInput.value='';await refresh()}catch(error){accessKey='';$('login-status').textContent=error.message}});
+  function logout(){if(!accessKey)fetch('/api/account/logout',{method:'POST'}).catch(()=>{});accessKey='';keyInput.value='';$('clean-pin').value='';planning.hidden=true;login.hidden=false;$('login-status').textContent='Vous êtes déconnecté.'}
+  async function openPlanning(){login.hidden=true;planning.hidden=false;await refresh()}
+  $('login-form').addEventListener('submit',async event=>{
+    event.preventDefault();const status=$('login-status');
+    const useKey=!$('key-field').hidden;
+    try{
+      if(useKey){accessKey=keyInput.value.trim();status.textContent='Vérification de la clé…';await request('/api/cleaning/workspace')}
+      else{
+        accessKey='';status.textContent='Connexion…';
+        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('clean-name').value,pin:$('clean-pin').value})});
+        const data=await response.json();if(!response.ok)throw Error(data.error||'Connexion impossible.');
+      }
+      status.textContent='';await openPlanning();
+    }catch(error){accessKey='';status.textContent=error.message}
+  });
+  $('use-key').addEventListener('click',()=>{const showKey=$('key-field').hidden;$('clean-name').required=!showKey;$('clean-pin').required=!showKey;keyInput.required=showKey;$('key-field').hidden=!showKey;$('pin-fields').hidden=showKey;$('use-key').textContent=showKey?'Utiliser mon prénom et mon code':'Utiliser la clé d’équipe';(showKey?keyInput:$('clean-name')).focus()});
+  // Session permanente : on rouvre directement le planning si l'appareil est déjà connecté.
+  fetch('/api/account/me').then(response=>response.ok?response.json():null).then(member=>{if(member){$('who').textContent=member.name;openPlanning()}}).catch(()=>{});
   $('refresh').addEventListener('click',refresh);$('task-filter').addEventListener('change',refresh);$('logout').addEventListener('click',logout);
 })();

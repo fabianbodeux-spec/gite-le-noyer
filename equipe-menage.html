@@ -15,12 +15,12 @@
   <main class="clean-main">
     <section id="login-panel" class="clean-login">
       <p class="eyebrow">Accès équipe</p><h1>Les rotations de ménage</h1>
-      <p>Consultez les départs, les prochaines arrivées et les consignes. Confirmez la réception de chaque demande, puis validez le ménage une fois terminé.</p>
-      <form id="login-form"><label for="clean-key">Clé d’accès équipe<input id="clean-key" type="password" autocomplete="current-password" required></label><button class="primary">Ouvrir le planning</button></form>
+      <p>Connectez-vous avec votre prénom et votre code personnel. Cet appareil restera connecté jusqu’à ce que vous cliquiez sur « Fermer ».</p>
+      <form id="login-form"><div id="pin-fields"><label for="clean-name">Votre prénom<input id="clean-name" type="text" autocomplete="username" autocapitalize="words" required></label><label for="clean-pin">Votre code à 6 chiffres<input id="clean-pin" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="current-password" required></label></div><div id="key-field" hidden><label for="clean-key">Clé d’accès équipe<input id="clean-key" type="password" autocomplete="off"></label></div><button class="primary">Ouvrir le planning</button></form><button id="use-key" class="link-button" type="button">Utiliser la clé d’équipe</button>
       <p id="login-status" class="status" role="status" aria-live="polite"></p>
     </section>
     <section id="planning" hidden>
-      <div class="plan-head"><div><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="task-filter">Suivi<select id="task-filter"><option value="pending">À suivre</option><option value="all">Toutes les rotations</option><option value="transmit">À transmettre</option><option value="receipt">Réception à confirmer</option><option value="clean">Ménage à terminer</option><option value="done">Terminées</option></select></label><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
+      <div class="plan-head"><div><h1>Planning ménage</h1><p id="today-label"></p><p class="who-line">Connecté : <span id="who">équipe</span></p></div><div class="plan-controls"><label for="task-filter">Suivi<select id="task-filter"><option value="pending">À suivre</option><option value="all">Toutes les rotations</option><option value="transmit">À transmettre</option><option value="receipt">Réception à confirmer</option><option value="clean">Ménage à terminer</option><option value="done">Terminées</option></select></label><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
       <p id="plan-status" class="status" role="status" aria-live="polite"></p>
       <div id="tasks" class="task-list" aria-live="polite"></div>
     </section>

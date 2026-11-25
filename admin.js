@@ -47,8 +47,8 @@
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),30000);
     try {
-      const response=await fetch('/api/admin/'+path,{signal:controller.signal,method:data?'POST':'GET',headers:{Authorization:'Bearer '+token,...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
-      if(response.status===401)throw Error('Clé refusée. Utilisez la clé affichée dans le Terminal pour '+location.host+'. Copiez uniquement la clé, sans le libellé.');
+      const response=await fetch('/api/admin/'+path,{signal:controller.signal,method:data?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});
+      if(response.status===401)throw Error(token?'Clé de secours refusée. Copiez uniquement la clé, sans le libellé.':'Connexion expirée ou refusée. Reconnectez-vous avec votre prénom et votre code.');
       const payload=await response.text();let result={};
       try{result=payload?JSON.parse(payload):{}}catch{if(!response.ok)throw Error('Le serveur a répondu HTTP '+response.status+' sans message exploitable. Consultez les journaux Railway.');throw Error('Réponse du serveur illisible. Actualisez la page et consultez les journaux Railway.')}
       if(!response.ok)throw Error(result.error || 'Erreur serveur HTTP '+response.status+'. Consultez les journaux Railway.');return result;
@@ -62,7 +62,7 @@
   element('download-backup')?.addEventListener('click',async event=>{
     const trigger=event.currentTarget;trigger.disabled=true;
     try{
-      const response=await fetch('/api/admin/backup',{headers:{Authorization:'Bearer '+token}});
+      const response=await fetch('/api/admin/backup',{headers:token?{Authorization:'Bearer '+token}:{}});
       if(!response.ok)throw Error(response.status===401?'Clé refusée : reconnectez-vous.':'Sauvegarde impossible (HTTP '+response.status+').');
       const blob=await response.blob();const link=document.createElement('a');
       link.href=URL.createObjectURL(blob);link.download='le-noyer-sauvegarde-'+today+'.sqlite3';
@@ -80,7 +80,7 @@
     if(!year.reportValidity())return;
     const current=++generation;
     const [state,workspace]=await Promise.all([api('state?year='+year.value),api('workspace?year='+year.value)]);
-    if(current!==generation || !token)return;
+    if(current!==generation || (!token && !window.NoyerAccount))return;
     element('management').hidden=false;element('login').hidden=true;element('auth-shell').hidden=true;
     announce('Données actualisées. Le prévisionnel concerne les demandes directes du site, pas les réservations externes.');
     element('metrics').replaceChildren();
@@ -107,19 +107,45 @@
     updateSelection();
     window.NoyerWorkspace.render(workspace,state);
   }
+  async function openManagement(){
+    if(!window.NoyerWorkspace)throw Error('Le module de gestion n’a pas chargé. Rechargez la page.');
+    if(!workspaceReady){window.NoyerWorkspace.connect(api,refresh);workspaceReady=true}
+    await refresh();element('page-title').focus({preventScroll:true});
+  }
   element('login').addEventListener('submit',async event=>{
     event.preventDefault();
     const trigger=event.currentTarget.querySelector('button');trigger.disabled=true;
-    announce('Connexion au backend…');
-    token=element('admin-token').value.trim().replace(/^Cl[ée]\s+propri[ée]taire\s*:\s*/i,'').trim();
+    const useKey=!element('admin-key-field').hidden;
+    announce('Connexion…');
     try {
-      if(!window.NoyerWorkspace)throw Error('Le module de gestion n’a pas chargé. Arrêtez le serveur avec Ctrl+C, relancez python3 ~/le-noyer-v6/demarrer.py puis rechargez la page.');
-      if(!workspaceReady){window.NoyerWorkspace.connect(api,refresh);workspaceReady=true}
-      await refresh();element('admin-token').value='';element('page-title').focus({preventScroll:true});
+      if(useKey){
+        token=element('admin-token').value.trim().replace(/^Cl[ée]\s+(propri[ée]taire|de secours)\s*:\s*/i,'').trim();
+        window.NoyerAccount=null;
+      } else {
+        token='';
+        const response=await fetch('/api/account/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:element('admin-name').value,pin:element('admin-pin').value})});
+        const member=await response.json();if(!response.ok)throw Error(member.error||'Connexion impossible.');
+        if(member.role!=='owner'){await fetch('/api/account/logout',{method:'POST'});location.href='/equipe-menage';return}
+        window.NoyerAccount=member;
+      }
+      await openManagement();element('admin-token').value='';element('admin-pin').value='';
     }catch(error){token='';announce(error.message)}
     finally{trigger.disabled=false}
   });
-  element('logout').addEventListener('click',()=>{window.NoyerWorkspace?.clear();token='';generation++;element('management').hidden=true;element('auth-shell').hidden=false;element('login').hidden=false;['rates','blocks','requests-platforms','requests-site','reception-list','cleaning-list','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());announce('Gestion fermée.')});
+  element('use-rescue-key').addEventListener('click',()=>{
+    const showKey=element('admin-key-field').hidden;
+    element('admin-key-field').hidden=!showKey;element('admin-pin-fields').hidden=showKey;
+    element('admin-name').required=!showKey;element('admin-pin').required=!showKey;element('admin-token').required=showKey;
+    element('use-rescue-key').textContent=showKey?'Utiliser mon prénom et mon code':'Utiliser la clé de secours';
+    (showKey?element('admin-token'):element('admin-name')).focus();
+  });
+  // Session permanente : l'appareil reste connecté jusqu'à « Fermer la gestion ».
+  fetch('/api/account/me').then(response=>response.ok?response.json():null).then(async member=>{
+    if(!member)return;
+    if(member.role!=='owner'){location.href='/equipe-menage';return}
+    window.NoyerAccount=member;try{await openManagement()}catch(error){announce(error.message)}
+  }).catch(()=>{});
+  element('logout').addEventListener('click',()=>{if(!token)fetch('/api/account/logout',{method:'POST'}).catch(()=>{});window.NoyerAccount=null;window.NoyerWorkspace?.clear();token='';generation++;element('management').hidden=true;element('auth-shell').hidden=false;element('login').hidden=false;['rates','blocks','requests-platforms','requests-site','reception-list','cleaning-list','metrics','admin-calendar'].forEach(id=>element(id).replaceChildren());announce('Gestion fermée.')});
   element('refresh').addEventListener('click',()=>refresh().catch(error=>announce(error.message)));
   year.addEventListener('change',()=>refresh().catch(error=>announce(error.message)));
   function resetRate(){element('rate-form').reset();element('rate-form').elements.namedItem('id').value=0}

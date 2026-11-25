@@ -96,3 +96,8 @@ button:disabled{opacity:.55;cursor:wait}
   .clean-top>a:last-child{font-size:12px;padding:7px 10px}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.hint{color:var(--muted);font-size:13px;margin:4px 0 16px}
+.link-button{min-height:44px;margin-top:10px;width:100%;border:0;background:transparent;color:var(--muted);font-weight:500;text-decoration:underline;text-underline-offset:4px}
+.link-button:hover{color:var(--ink)}
+.who-line{font-size:13px;margin-top:4px!important}
+#login-form [hidden]{display:none}

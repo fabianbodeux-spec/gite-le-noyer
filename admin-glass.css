@@ -184,3 +184,21 @@
 .erp-body .dossier-next{flex:1}
 .erp-body .dossier-card{grid-template-columns:minmax(0,1fr);overflow:hidden}
 .erp-body .dossier-top,.erp-body .dossier-foot{min-width:0}
+
+/* Membres et connexion */
+.erp-body .link-button{display:block;width:100%;min-height:44px;margin-top:10px;border:0;background:transparent;color:var(--g-muted);font:500 13.5px var(--sans);text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+.erp-body .link-button:hover{color:var(--g-ink)}
+.erp-body #login [hidden]{display:none}
+.erp-body .members-layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;margin-bottom:20px;align-items:start}
+.erp-body .invitation-box{margin-top:18px;padding:16px;border-radius:var(--r-md);border:1px solid rgba(214,165,125,.35);background:rgba(214,165,125,.08)}
+.erp-body .invitation-box h3{margin:0 0 6px;font:350 18px var(--display)}
+.erp-body .invitation-box p{color:var(--g-muted);font-size:13px;margin:0 0 10px}
+.erp-body .invitation-box textarea{width:100%;font:13px/1.5 var(--sans)}
+.erp-body .members-list{display:grid;gap:10px}
+.erp-body .member-row{display:grid;grid-template-columns:minmax(150px,1fr) auto minmax(160px,1fr) auto;gap:14px;align-items:center;padding:12px 14px;border-radius:var(--r-md);border:1px solid var(--edge);background:rgba(0,0,0,.14)}
+.erp-body .member-row.is-off{opacity:.6}
+.erp-body .member-row strong{display:block}
+.erp-body .member-role,.erp-body .member-meta{color:var(--g-muted);font-size:12.5px}
+.erp-body .member-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.erp-body .member-actions .btn{min-height:38px;padding:7px 12px;font-size:12.5px}
+@media(max-width:900px){.erp-body .members-layout{grid-template-columns:1fr}.erp-body .member-row{grid-template-columns:1fr auto}.erp-body .member-meta,.erp-body .member-actions{grid-column:1/-1;justify-content:flex-start}}

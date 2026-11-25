@@ -139,6 +139,7 @@
       else if(event.event_type==='cleaning_request_received'||event.event_type==='cleaning_completed_by_team')description='Départ concerné : '+(detail.departure?dateLabel(detail.departure):'date à vérifier')+'.';
       else if(event.event_type==='arrival_time_updated'||event.event_type==='departure_time_updated')description=(detail.from||'—')+' → '+(detail.to||'—')+'.';
       else if(detail.arrival)description=dateLabel(detail.arrival)+' → '+dateLabel(detail.departure)+(detail.source?' · '+(sources[detail.source]||detail.source):'');
+      if(detail.by)description=(description?description+' ':'')+'Par '+detail.by+'.';
       if(description)text(item,'p',description);item.prepend(head);list.append(item);
     });
     if(!list.children.length)text(section,'p','Aucune étape enregistrée pour le moment.');else section.append(list);
@@ -194,7 +195,7 @@
     notice('Transmission des consignes déclarée et inscrite dans l’historique.');
   }
   function showPage(page,updateUrl=false) {
-    const titles={dashboard:'Vue d’ensemble',dossiers:'Dossiers',reservations:'Réservations externes','site-requests':'Demandes du site',cleaning:'Accueil & ménage',pricing:'Tarifs du site',availability:'Disponibilités'};
+    const titles={dashboard:'Vue d’ensemble',dossiers:'Dossiers',members:'Membres',reservations:'Réservations externes','site-requests':'Demandes du site',cleaning:'Accueil & ménage',pricing:'Tarifs du site',availability:'Disponibilités'};
     if(!titles[page])page='dashboard';
     const changed=activePage!==page;activePage=page;
     document.querySelectorAll('[data-erp-page]').forEach(panel=>{panel.hidden=panel.dataset.erpPage!==page});
@@ -205,6 +206,7 @@
     element('erp-sidebar').classList.remove('is-open');element('mobile-menu').setAttribute('aria-expanded','false');
     if(changed){window.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});element('page-title').focus({preventScroll:true})}
     if(updateUrl&&location.hash!=='#'+page)history.pushState(null,'','#'+page);
+    if(page==='members')renderMembers().catch(error=>notice(error.message));
   }
   function showRecord(row) {
     if(activePage!=='dossiers')showPage(row.source==='direct'?'site-requests':'reservations',true);
@@ -515,6 +517,40 @@
     const form=element('settings-form');if(!form||!current.settings||form.dataset.dirty==='true')return;
     Object.entries(current.settings).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(input)input.value=value});
   }
+  // Membres : comptes personnels avec code à 6 chiffres choisi par chacun.
+  function invitationMessage(name,link){
+    return 'Bonjour '+name+',\n\nVoici votre accès au Noyer. Ouvrez ce lien et choisissez votre code personnel à 6 chiffres (valable 48 h, une seule fois) :\n'+link+'\n\nEnsuite, connectez-vous avec votre prénom et ce code.';
+  }
+  function showInvitation(result){
+    const box=element('invitation-box');box.replaceChildren();box.hidden=false;
+    const link=location.origin+'/invitation#'+encodeURIComponent(result.invitation);
+    text(box,'h3','Invitation pour '+result.name);
+    text(box,'p','À envoyer vous-même (WhatsApp, SMS ou e-mail). Le lien est valable 48 h et ne sert qu’une fois. Il ne sera plus affiché ensuite.');
+    const area=document.createElement('textarea');area.rows=6;area.readOnly=true;area.value=invitationMessage(result.name,link);box.append(area);
+    const actions=document.createElement('div');actions.className='record-actions';box.append(actions);
+    button(actions,'Copier le message',async()=>{try{await navigator.clipboard.writeText(area.value);notice('Message d’invitation copié.')}catch{area.focus();area.select();notice('Copie automatique indisponible : le texte est sélectionné.')}},'btn');
+    button(actions,'Ouvrir WhatsApp',()=>{window.open('https://wa.me/?text='+encodeURIComponent(area.value),'_blank','noopener')},'btn btn-outline');
+  }
+  async function renderMembers(){
+    const list=element('members-list');if(!list)return;
+    const data=await api('members');list.replaceChildren();
+    const me=window.NoyerAccount;
+    element('my-account').textContent=me?'Connecté en tant que '+me.name+' ('+me.role_label+'). Changez votre code quand vous le souhaitez.':'Connecté avec la clé de secours : créez votre propre compte propriétaire, puis connectez-vous avec votre prénom et votre code.';
+    element('pin-form').hidden=!me;
+    if(!data.members.length){const empty=document.createElement('div');empty.className='empty-state';text(empty,'strong','Aucun membre pour l’instant.');text(empty,'p','Commencez par créer votre propre compte propriétaire, puis ceux de l’équipe ménage.');list.append(empty);return}
+    data.members.forEach(member=>{
+      const row=document.createElement('article');row.className='member-row'+(member.active?'':' is-off');
+      const who=document.createElement('div');text(who,'strong',member.name);text(who,'span',data.roles[member.role]+(me&&me.id===member.id?', vous':''),'member-role');row.append(who);
+      const state=member.active?(member.has_pin?(member.locked_until&&member.locked_until>new Date().toISOString().slice(0,19)?'Bloqué 15 min':'Actif'):'Invitation en attente'):'Désactivé';
+      text(row,'span',state,'record-status '+(state==='Actif'?'status-confirmed':state==='Désactivé'?'status-cancelled':'status-pending'));
+      const last=document.createElement('span');last.className='member-meta';last.textContent=member.last_login_at?'Dernière connexion : '+dateLabel(member.last_login_at.slice(0,10))+(member.sessions?', '+member.sessions+' appareil'+(member.sessions>1?'s':''):''):'Jamais connecté';row.append(last);
+      const actions=document.createElement('div');actions.className='member-actions';row.append(actions);
+      button(actions,member.has_pin?'Nouveau code':'Renvoyer l’invitation',async()=>{const result=await api('members/'+member.id+'/invite',{});showInvitation({...result,name:member.name});await renderMembers()},'btn btn-outline');
+      if(member.active&&member.sessions)button(actions,'Déconnecter partout',async()=>{await api('members/'+member.id+'/signout',{});notice(member.name+' est déconnecté de tous ses appareils.');await renderMembers()},'btn btn-muted');
+      if(member.active&&!(me&&me.id===member.id))button(actions,'Désactiver',async()=>{if(!window.confirm('Désactiver '+member.name+' ? Son accès est coupé immédiatement.'))return;await api('members/'+member.id+'/deactivate',{});notice(member.name+' est désactivé.');await renderMembers()},'btn btn-muted');
+      list.append(row);
+    });
+  }
   // Compteurs du menu : mêmes règles que le tableau de bord.
   function updateNavCounts(urgentDossiers=0) {
     const future=row=>row.departure>current.today;
@@ -547,6 +583,19 @@
   window.NoyerWorkspace={
     connect(client,reload) {
       api=client;refresh=reload;
+      element('member-form')?.addEventListener('submit',async event=>{
+        event.preventDefault();const form=event.currentTarget;const submit=form.querySelector('button');submit.disabled=true;
+        try{const result=await api('members',{name:form.elements.namedItem('name').value,role:form.elements.namedItem('role').value});form.reset();showInvitation(result);await renderMembers()}
+        catch(error){notice(error.message)}finally{submit.disabled=false}
+      });
+      element('pin-form')?.addEventListener('submit',async event=>{
+        event.preventDefault();const form=event.currentTarget;
+        try{
+          const response=await fetch('/api/account/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current:form.elements.namedItem('current').value,new:form.elements.namedItem('new').value})});
+          const result=await response.json();if(!response.ok)throw Error(result.error||'Changement impossible.');
+          form.reset();notice('Votre code a été changé.');
+        }catch(error){notice(error.message)}
+      });
       const settingsForm=element('settings-form');
       if(settingsForm){
         settingsForm.addEventListener('input',()=>{settingsForm.dataset.dirty='true'});

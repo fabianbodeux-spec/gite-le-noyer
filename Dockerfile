@@ -10,8 +10,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY deployment.py wsgi.py serveur.py reservations.py operations.py ./
-COPY index.html midweek.html admin.html equipe-menage.html favicon.svg ./
+COPY deployment.py wsgi.py serveur.py reservations.py operations.py accounts.py ./
+COPY index.html midweek.html admin.html equipe-menage.html invitation.html invitation.js favicon.svg ./
 COPY site.css booking.css workspace.css admin-glass.css cleaning.css relief.css site.js booking.js admin.js workspace.js cleaning.js relief.js ui.js ./
 COPY vendor ./vendor
 COPY fonts ./fonts

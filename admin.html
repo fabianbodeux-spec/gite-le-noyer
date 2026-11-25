@@ -22,9 +22,12 @@
       <h1>La maison, bien organisée.</h1>
       <p>Réservations, préparation des séjours et calendrier, réunis dans un seul espace.</p>
       <form id="login" class="admin-login">
-        <label for="admin-token">Clé propriétaire<input id="admin-token" type="password" autocomplete="current-password" required></label>
+        <div id="admin-pin-fields"><label for="admin-name">Votre prénom<input id="admin-name" type="text" autocomplete="username" autocapitalize="words" required></label>
+        <label for="admin-pin">Votre code à 6 chiffres<input id="admin-pin" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="current-password" required></label></div>
+        <div id="admin-key-field" hidden><label for="admin-token">Clé de secours<input id="admin-token" type="password" autocomplete="off"></label></div>
         <button class="btn">Ouvrir la gestion</button>
       </form>
+      <button id="use-rescue-key" class="link-button" type="button">Utiliser la clé de secours</button>
       <p id="admin-status" role="status" aria-live="polite"></p>
     </main>
   </div>
@@ -42,6 +45,7 @@
         <span class="nav-label nav-label-lower">Réglages</span>
         <a href="#pricing" data-erp-nav="pricing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 7a7 7 0 1 0 0 10M4 10h10M4 14h10"/></svg>Tarifs du site</a>
         <a href="#availability" data-erp-nav="availability"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Disponibilités</a>
+        <a href="#members" data-erp-nav="members"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c.6-3.4 3-5.5 6-5.5s5.4 2.1 6 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c1.6.7 2.7 2.4 3 5.4"/></svg>Membres</a>
       </nav>
       <div class="erp-sidebar-bottom"><button id="download-backup" type="button" class="sidebar-backup">Télécharger une sauvegarde</button><a href="/">← Retour au site public</a><button id="logout" type="button" class="sidebar-logout">Fermer la gestion</button></div>
     </aside>
@@ -64,6 +68,28 @@
         <p class="page-intro">Chaque séjour, de la demande au ménage. Les dossiers du site et des plateformes sont réunis ; cliquez sur une carte pour ouvrir sa fiche.</p>
         <section class="dossier-today" aria-labelledby="dossier-today-title"><h2 id="dossier-today-title">À faire</h2><div id="dossier-actions" class="dossier-actions"></div></section>
         <div id="dossier-board" class="dossier-board" aria-label="Dossiers par étape"></div>
+      </section>
+      <section id="members-page" class="erp-page" data-erp-page="members" aria-labelledby="page-title" hidden>
+        <p class="page-intro">Chaque propriétaire et chaque membre de l’équipe ménage a son propre code à 6 chiffres. Vous créez le membre, envoyez le lien d’invitation, et la personne choisit son code elle-même.</p>
+        <div class="members-layout">
+          <section class="erp-subpanel" aria-labelledby="add-member-title"><h2 id="add-member-title">Ajouter un membre</h2>
+            <form id="member-form" class="erp-form-grid">
+              <label>Prénom ou nom<input name="name" type="text" maxlength="60" required placeholder="Marie, Jean D."></label>
+              <label>Rôle<select name="role"><option value="cleaner">Équipe ménage</option><option value="owner">Propriétaire</option></select></label>
+              <button class="btn" type="submit">Créer et préparer l’invitation</button>
+            </form>
+            <div id="invitation-box" class="invitation-box" hidden></div>
+          </section>
+          <section class="erp-subpanel" aria-labelledby="my-pin-title"><h2 id="my-pin-title">Mon code</h2>
+            <p id="my-account">Connecté avec la clé de secours : créez votre propre compte propriétaire, puis connectez-vous avec votre prénom et votre code.</p>
+            <form id="pin-form" class="erp-form-grid" hidden>
+              <label>Code actuel<input name="current" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" required></label>
+              <label>Nouveau code<input name="new" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" required></label>
+              <button class="btn btn-outline" type="submit">Changer mon code</button>
+            </form>
+          </section>
+        </div>
+        <section class="erp-subpanel" aria-labelledby="members-title"><h2 id="members-title">Membres</h2><div id="members-list" class="members-list"></div></section>
       </section>
       <section id="reservations-page" class="erp-page" data-erp-page="reservations" aria-labelledby="page-title" hidden>
         <div class="page-heading"><div><p class="page-intro">Valide les dates, prépare l’arrivée et le ménage. Le paiement et les échanges client restent gérés par la plateforme.</p></div><button type="button" id="add-platform-booking" class="btn">Ajouter une réservation</button></div>

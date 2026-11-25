@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0c1d15">
+  <meta name="robots" content="noindex">
+  <title>Choisir mon code — Le Noyer</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/cleaning.css">
+  <script defer src="/invitation.js"></script>
+</head>
+<body>
+  <header class="clean-top"><a href="/" class="brand"><svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="18" fill="#f1efe6"/><path d="M17 46V18l30 28V18M32 32V14M32 23c-9 0-13-5-13-11 9 0 13 5 13 11Zm0 0c9 0 13-5 13-11-9 0-13 5-13 11Z" fill="none" stroke="#183628" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Le Noyer</strong><small>Invitation</small></span></a></header>
+  <main class="clean-main">
+    <section class="clean-login" aria-labelledby="invite-title">
+      <p class="eyebrow" id="invite-role">Invitation</p>
+      <h1 id="invite-title">Choisissez votre code</h1>
+      <p id="invite-intro">Vérification du lien…</p>
+      <form id="invite-form" hidden>
+        <label for="pin">Votre code à 6 chiffres<input id="pin" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="new-password" required></label>
+        <label for="pin-confirm">Confirmez le code<input id="pin-confirm" type="password" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="new-password" required></label>
+        <p class="hint">Évitez les chiffres identiques (111111) et les suites (123456). Ce code est personnel : personne d’autre ne le connaît, pas même le propriétaire.</p>
+        <button class="primary" type="submit">Enregistrer mon code</button>
+      </form>
+      <p id="invite-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

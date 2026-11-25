@@ -28,14 +28,15 @@ def create_application(root=ROOT):
     def application(environ, start_response):
         response = []
 
-        def respond(status, body, mime='application/json; charset=utf-8', cache='no-store'):
+        def respond(status, body, mime='application/json; charset=utf-8', cache='no-store', headers=None):
             if isinstance(body, dict):
                 body = json.dumps(body, ensure_ascii=False).encode()
             elif isinstance(body, str):
                 body = body.encode()
-            headers = [('Content-Type', mime), ('Content-Length', str(len(body))),
+            response_headers = [('Content-Type', mime), ('Content-Length', str(len(body))),
                        ('Cache-Control', cache), ('X-Content-Type-Options', 'nosniff'),
                        ('X-Frame-Options', 'DENY'), ('Referrer-Policy', 'same-origin')]
+            headers = response_headers + list(headers or ())
             start_response(f'{status} {HTTPStatus(status).phrase}', headers)
             response.append(b'' if environ['REQUEST_METHOD'] == 'HEAD' else body)
 
@@ -56,6 +57,7 @@ def create_application(root=ROOT):
             if environ.get(key):
                 handler.headers[key.replace('_', '-')] = environ[key]
         handler.rfile = environ['wsgi.input']
+        handler.client_address = (environ.get('REMOTE_ADDR', ''), 0)
         handler.respond = respond
         try:
             getattr(handler, 'do_' + method)()

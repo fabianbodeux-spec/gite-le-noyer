@@ -6,6 +6,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 
 from reservations import BookingError, PACKAGES, cents, dates, integer, parse_date, stay_package
+from accounts import current_member
 
 
 SOURCES = ('direct', 'ardennes-etape', 'villaforyou', 'belvilla', 'telephone', 'autre')
@@ -38,8 +39,12 @@ def arrival_access_text(arrival, departure, arrival_time, departure_time):
 
 
 def record_event(connection, booking_id, event_type, actor='system', details=None):
+    details = dict(details or {})
+    member = current_member.get()
+    if member and actor in ('owner', 'cleaner') and 'by' not in details:
+        details['by'] = member['name']
     connection.execute('''INSERT INTO booking_timeline(booking_id,event_type,actor,details,created_at)
-        VALUES(?,?,?,?,?)''', (booking_id,event_type,actor,json.dumps(details or {},ensure_ascii=False),event_time()))
+        VALUES(?,?,?,?,?)''', (booking_id,event_type,actor,json.dumps(details,ensure_ascii=False),event_time()))
 
 
 def initialize_operations(connection):

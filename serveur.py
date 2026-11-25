@@ -14,8 +14,10 @@ import webbrowser
 
 from reservations import Store, BookingError
 from operations import Operations, preview_email
+from accounts import Accounts, current_member, ROLES
 
 ROOT = Path(__file__).resolve().parent
+SESSION_COOKIE = 'noyer_session'
 
 
 def load_admin_token(root=ROOT, required=False):
@@ -71,8 +73,15 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
     cleaning_token = cleaner_token.strip()
     if cleaning_token and (len(cleaning_token) < 24 or any(character.isspace() for character in cleaning_token)):
         raise SystemExit('NOYER_CLEANING_TOKEN doit contenir au moins 24 caractères sans espace.')
+    accounts = Accounts(store)
+    secure_cookie = bool(os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('NOYER_ENV') == 'production')
+
+    def session_cookie(token, max_age=315360000):
+        value = f'{SESSION_COOKIE}={token}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Strict'
+        return value + ('; Secure' if secure_cookie else '')
+
     class Handler(BaseHTTPRequestHandler):
-        def respond(self, status, body, mime='application/json; charset=utf-8', cache='no-store'):
+        def respond(self, status, body, mime='application/json; charset=utf-8', cache='no-store', headers=None):
             if isinstance(body, dict):
                 body = json.dumps(body, ensure_ascii=False).encode()
             elif isinstance(body, str):
@@ -82,21 +91,57 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                                 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff',
                                 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin'}.items():
                 self.send_header(name, value)
+            for name, value in headers or ():
+                self.send_header(name, value)
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(body)
 
+        def session_token(self):
+            for part in self.headers.get('Cookie', '').split(';'):
+                name, _, value = part.strip().partition('=')
+                if name == SESSION_COOKIE:
+                    return value
+            return ''
+
+        def address(self):
+            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+            return forwarded or (getattr(self, 'client_address', None) or ('',))[0]
+
+        def same_origin(self):
+            # Les cookies sont SameSite=Strict ; on refuse en plus tout envoi d'une autre origine.
+            origin = self.headers.get('Origin')
+            if origin and urlsplit(origin).netloc != self.headers.get('Host', ''):
+                raise BookingError('Origine de la requête refusée.', 403)
+
+        def session_member(self, roles):
+            member = accounts.member_for_session(self.session_token())
+            if member and member['role'] in roles:
+                if self.command == 'POST':
+                    self.same_origin()
+                current_member.set(member)
+                return member
+            return None
+
         def authorize(self):
             supplied = self.headers.get('Authorization', '').removeprefix('Bearer ')
-            if not hmac.compare_digest(supplied.encode(), admin_token.encode()):
-                raise BookingError('Clé propriétaire requise.', 401)
+            if supplied and hmac.compare_digest(supplied.encode(), admin_token.encode()):
+                current_member.set({'id': None, 'name': 'Clé de secours', 'role': 'owner'})
+                return current_member.get()
+            member = self.session_member(('owner',))
+            if member:
+                return member
+            raise BookingError('Connexion propriétaire requise.', 401)
 
         def authorize_cleaner(self):
-            if not cleaning_token:
-                raise BookingError('L’accès de l’équipe ménage doit être configuré par le propriétaire.', 503)
             supplied = self.headers.get('Authorization', '').removeprefix('Bearer ')
-            if not hmac.compare_digest(supplied.encode(), cleaning_token.encode()):
-                raise BookingError('Clé équipe ménage refusée.', 401)
+            if supplied and cleaning_token and hmac.compare_digest(supplied.encode(), cleaning_token.encode()):
+                current_member.set({'id': None, 'name': 'Clé d’équipe', 'role': 'cleaner'})
+                return current_member.get()
+            member = self.session_member(('cleaner', 'owner'))
+            if member:
+                return member
+            raise BookingError('Connexion de l’équipe requise.', 401)
 
         def read_json(self):
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
@@ -120,6 +165,7 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
 
         def do_GET(self):
             try:
+                current_member.set(None)
                 url = urlsplit(self.path)
                 params = parse_qs(url.query)
                 if url.path == '/healthz':
@@ -129,6 +175,17 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                 if url.path == '/api/admin/workspace':
                     self.authorize()
                     return self.respond(200, operations.workspace(params.get('year', [str(date.today().year)])[0]))
+                if url.path == '/api/account/me':
+                    member = accounts.member_for_session(self.session_token())
+                    if not member:
+                        raise BookingError('Non connecté.', 401)
+                    accounts.touch(self.session_token())
+                    return self.respond(200, {**member, 'role_label': ROLES[member['role']]})
+                if url.path == '/api/account/invitation':
+                    return self.respond(200, accounts.invitation_info(params.get('token', [''])[0]))
+                if url.path == '/api/admin/members':
+                    self.authorize()
+                    return self.respond(200, accounts.members())
                 if url.path == '/api/admin/settings':
                     self.authorize()
                     return self.respond(200, operations.settings())
@@ -144,8 +201,8 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                         self.authorize()
                     return self.respond(200, store.calendar(params.get('year', [str(date.today().year)])[0], private))
                 path = unquote(url.path)
-                relative = {'/': 'index.html', '/admin': 'admin.html', '/equipe-menage': 'equipe-menage.html'}.get(path, path.lstrip('/'))
-                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css', 'relief.js', 'relief.css', 'ui.js', 'admin-glass.css')
+                relative = {'/': 'index.html', '/admin': 'admin.html', '/equipe-menage': 'equipe-menage.html', '/invitation': 'invitation.html'}.get(path, path.lstrip('/'))
+                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css', 'relief.js', 'relief.css', 'ui.js', 'admin-glass.css', 'invitation.html', 'invitation.js')
                 static_asset = bool(re.fullmatch(STATIC_ASSETS, relative))
                 allowed = allowed or static_asset or bool(re.fullmatch(r'traces/promenade-12\.(gpx|geojson)', relative))
                 target = (root / relative).resolve()
@@ -160,11 +217,14 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
 
         def do_POST(self):
             try:
+                current_member.set(None)
                 path = urlsplit(self.path).path
                 if path.startswith('/api/admin/'):
                     self.authorize()
                 elif path.startswith('/api/cleaning/'):
                     self.authorize_cleaner()
+                if path.startswith('/api/account/'):
+                    return self.account(path)
                 data = self.read_json()
                 if path == '/api/quote':
                     return self.respond(200, store.quote(data))
@@ -180,6 +240,16 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     return self.respond(201, operations.add_inquiry(data))
                 if path == '/api/admin/settings':
                     return self.respond(200, operations.update_settings(data))
+                if path == '/api/admin/members':
+                    return self.respond(201, accounts.add_member(data))
+                match = re.fullmatch(r'/api/admin/members/(\d+)/(invite|deactivate|signout)', path)
+                if match:
+                    member_id = int(match[1])
+                    if match[2] == 'invite':
+                        return self.respond(200, accounts.reinvite(member_id))
+                    if match[2] == 'deactivate':
+                        return self.respond(200, accounts.deactivate(member_id, (current_member.get() or {}).get('id')))
+                    return self.respond(200, accounts.sign_out_everywhere(member_id))
                 if path == '/api/admin/rates/bulk':
                     return self.respond(200, operations.bulk_rates(data))
                 match = re.fullmatch(r'/api/cleaning/tasks/(\d+)/(received|complete)', path)
@@ -210,6 +280,27 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                 self.respond(error.status, {'error': str(error)})
             except sqlite3.Error:
                 self.respond(503, {'error': 'La base est momentanément indisponible. Réessayez.'})
+
+        def account(self, path):
+            """Connexion, invitation, déconnexion et changement de code."""
+            self.same_origin()
+            device = self.headers.get('User-Agent', '')
+            if path == '/api/account/logout':
+                accounts.logout(self.session_token())
+                return self.respond(200, {'ok': True}, headers=[('Set-Cookie', session_cookie('', 0))])
+            data = self.read_json()
+            if path == '/api/account/login':
+                token, member = accounts.login(data.get('name'), data.get('pin'), self.address(), device)
+                return self.respond(200, {**member, 'role_label': ROLES[member['role']]}, headers=[('Set-Cookie', session_cookie(token))])
+            if path == '/api/account/invitation':
+                token, member = accounts.accept_invitation(data.get('token'), data.get('pin'), self.address(), device)
+                return self.respond(200, {**member, 'role_label': ROLES[member['role']]}, headers=[('Set-Cookie', session_cookie(token))])
+            if path == '/api/account/pin':
+                member = accounts.member_for_session(self.session_token())
+                if not member:
+                    raise BookingError('Non connecté.', 401)
+                return self.respond(200, accounts.change_pin(member['id'], data.get('current'), data.get('new')))
+            raise BookingError('Route inconnue.', 404)
 
     return Handler
 
