@@ -427,11 +427,29 @@
       button(actions,'Copier la saison',()=>fillRate(rate),'table-action');button(actions,'Désactiver',async()=>{if(!window.confirm('Désactiver cette période tarifaire ?'))return;await api('rates/'+rate.id+'/deactivate',{});await refresh()},'table-action');row.append(actions);body.append(row);
     });table.append(body);parent.append(table);
   }
+  // Compteurs du menu : mêmes règles que le tableau de bord.
+  function updateNavCounts() {
+    const future=row=>row.departure>current.today;
+    const counts={
+      reservations:current.records.filter(row=>future(row)&&((row.source!=='direct'&&row.status==='pending')||row.conflict)).length,
+      'site-requests':current.records.filter(row=>future(row)&&row.source==='direct'&&row.status==='pending').length,
+      cleaning:(current.cleaning||[]).filter(task=>!task.done).length
+    };
+    document.querySelectorAll('[data-erp-nav]').forEach(link=>{
+      let badge=link.querySelector('.nav-count');
+      const value=counts[link.dataset.erpNav]||0;
+      if(!value){badge?.remove();return}
+      if(!badge){badge=document.createElement('span');badge.className='nav-count';link.append(badge)}
+      badge.textContent=String(value);
+      badge.setAttribute('aria-label',value+' à traiter');
+    });
+  }
   function render(workspace,state) {
     current=workspace;currentRates=state.rates;
     if(lastYear!==state.year){selectedRates.clear();lastYear=state.year}
     selectedRates=new Set([...selectedRates].filter(id=>currentRates.some(rate=>rate.id===id)));
     renderToday();renderRecordLists();renderReception();renderCleaning();renderRates();
+    updateNavCounts();
     element('dashboard-date').textContent=dateInput(current.today);
     const missing=state.days.filter(day=>day.date>=current.today&&day.package&&day.state==='unpriced');
     element('rates-warning').textContent=missing.length?missing.length+' dates d’arrivée sans tarif pour '+state.year+'.':'Les dates d’arrivée disponibles ont un tarif pour '+state.year+'.';
@@ -439,6 +457,9 @@
   window.NoyerWorkspace={
     connect(client,reload) {
       api=client;refresh=reload;
+      // Les messages d'état deviennent des notifications qui s'effacent seules.
+      const status=element('erp-status');let statusTimer=0;
+      new MutationObserver(()=>{clearTimeout(statusTimer);if(status.textContent.trim())statusTimer=setTimeout(()=>{status.textContent=''},6000)}).observe(status,{childList:true,characterData:true,subtree:true});
       document.querySelectorAll('[data-erp-nav]').forEach(link=>link.addEventListener('click',()=>showPage(link.dataset.erpNav,true)));
       window.addEventListener('hashchange',()=>showPage(location.hash.slice(1)||'dashboard'));
       ['platform-status','platform-source','site-status'].forEach(id=>element(id).addEventListener('change',renderRecordLists));

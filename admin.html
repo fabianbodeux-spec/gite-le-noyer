@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f8f6ef">
+  <meta name="theme-color" content="#0c1d15">
   <title>Gestion des locations — Le Noyer</title>
   <link rel="icon" href="/favicon.svg">
   <link rel="stylesheet" href="/site.css">
   <link rel="stylesheet" href="/booking.css">
   <link rel="stylesheet" href="/workspace.css">
+  <link rel="stylesheet" href="/admin-glass.css">
   <script defer src="/workspace.js"></script>
   <script defer src="/admin.js"></script>
 </head>
@@ -33,20 +34,20 @@
       <a class="erp-brand" href="#dashboard"><img src="/favicon.svg" width="42" height="42" alt=""><span><strong>Le Noyer</strong><small>Espace propriétaire</small></span></a>
       <nav class="erp-nav">
         <span class="nav-label">Maison</span>
-        <a href="#dashboard" data-erp-nav="dashboard"><span aria-hidden="true">⌂</span>Vue d’ensemble</a>
-        <a href="#reservations" data-erp-nav="reservations"><span aria-hidden="true">▤</span>Réservations externes</a>
-        <a href="#site-requests" data-erp-nav="site-requests"><span aria-hidden="true">✉</span>Demandes du site</a>
-        <a href="#cleaning" data-erp-nav="cleaning"><span aria-hidden="true">◷</span>Accueil & ménage</a>
+        <a href="#dashboard" data-erp-nav="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Vue d’ensemble</a>
+        <a href="#reservations" data-erp-nav="reservations"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Réservations externes</a>
+        <a href="#site-requests" data-erp-nav="site-requests"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v12H8l-4 4z"/></svg>Demandes du site</a>
+        <a href="#cleaning" data-erp-nav="cleaning"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M5 21h14M7 21l1-9h8l1 9M9 12V8h6v4"/></svg>Accueil & ménage</a>
         <span class="nav-label nav-label-lower">Réglages</span>
-        <a href="#pricing" data-erp-nav="pricing"><span aria-hidden="true">€</span>Tarifs du site</a>
-        <a href="#availability" data-erp-nav="availability"><span aria-hidden="true">▦</span>Disponibilités</a>
+        <a href="#pricing" data-erp-nav="pricing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 7a7 7 0 1 0 0 10M4 10h10M4 14h10"/></svg>Tarifs du site</a>
+        <a href="#availability" data-erp-nav="availability"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Disponibilités</a>
       </nav>
       <div class="erp-sidebar-bottom"><a href="/">← Retour au site public</a><button id="logout" type="button" class="sidebar-logout">Fermer la gestion</button></div>
     </aside>
 
     <main id="erp-content" class="erp-main" tabindex="-1">
       <header class="erp-topbar">
-        <div class="erp-title-wrap"><button id="mobile-menu" class="mobile-menu" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><div><p class="erp-eyebrow">LE NOYER · GESTION</p><h1 id="page-title" tabindex="-1">Vue d’ensemble</h1></div></div>
+        <div class="erp-title-wrap"><button id="mobile-menu" class="mobile-menu" type="button" aria-label="Ouvrir la navigation" aria-expanded="false">☰</button><div><h1 id="page-title" tabindex="-1">Vue d’ensemble</h1></div></div>
         <div class="erp-controls"><label for="year">Année</label><input id="year" type="number" min="2000" max="2100" required><button class="btn btn-small" id="refresh" type="button">Actualiser</button></div>
       </header>
       <p id="erp-status" class="erp-status" role="status" aria-live="polite"></p>
@@ -119,8 +120,8 @@
     </main>
   </div>
 
-  <dialog id="record-dialog" class="record-dialog" aria-labelledby="record-title"><div class="dialog-head"><div><p class="erp-eyebrow">ESPACE DE TRAVAIL · SÉJOUR</p><h2 id="record-title"></h2></div><button type="button" id="record-close" class="icon-close" aria-label="Fermer l’espace de séjour">×</button></div><div id="record-content"></div></dialog>
-  <dialog id="cleaning-share-dialog" class="cleaning-share-dialog" aria-labelledby="cleaning-share-title"><div class="dialog-head"><div><p class="erp-eyebrow">TRANSMISSION À L’ÉQUIPE</p><h2 id="cleaning-share-title">Consignes de ménage</h2></div><button type="button" id="cleaning-share-close" class="icon-close" aria-label="Fermer le partage">×</button></div><p class="share-explainer">Le message ne part pas depuis le site. Choisissez un canal, envoyez-le dans votre application, puis confirmez l’envoi pour garder une trace.</p><label for="cleaning-share-text">Aperçu du message</label><textarea id="cleaning-share-text" rows="10" spellcheck="true"></textarea><div class="record-actions"><button type="button" id="cleaning-share-whatsapp" class="btn btn-outline">Ouvrir WhatsApp</button><button type="button" id="cleaning-share-native" class="btn btn-outline">Partager…</button><button type="button" id="cleaning-share-copy" class="btn btn-outline">Copier le texte</button></div><p id="cleaning-share-status" role="status" aria-live="polite"></p><button type="button" id="confirm-cleaning-share" class="btn" disabled>Message envoyé, inscrire dans l’historique</button></dialog>
+  <dialog id="record-dialog" class="record-dialog" aria-labelledby="record-title"><div class="dialog-head"><div><p class="erp-eyebrow">Fiche du séjour</p><h2 id="record-title"></h2></div><button type="button" id="record-close" class="icon-close" aria-label="Fermer l’espace de séjour">×</button></div><div id="record-content"></div></dialog>
+  <dialog id="cleaning-share-dialog" class="cleaning-share-dialog" aria-labelledby="cleaning-share-title"><div class="dialog-head"><div><p class="erp-eyebrow">Transmission à l’équipe</p><h2 id="cleaning-share-title">Consignes de ménage</h2></div><button type="button" id="cleaning-share-close" class="icon-close" aria-label="Fermer le partage">×</button></div><p class="share-explainer">Le message ne part pas depuis le site. Choisissez un canal, envoyez-le dans votre application, puis confirmez l’envoi pour garder une trace.</p><label for="cleaning-share-text">Aperçu du message</label><textarea id="cleaning-share-text" rows="10" spellcheck="true"></textarea><div class="record-actions"><button type="button" id="cleaning-share-whatsapp" class="btn btn-outline">Ouvrir WhatsApp</button><button type="button" id="cleaning-share-native" class="btn btn-outline">Partager…</button><button type="button" id="cleaning-share-copy" class="btn btn-outline">Copier le texte</button></div><p id="cleaning-share-status" role="status" aria-live="polite"></p><button type="button" id="confirm-cleaning-share" class="btn" disabled>Message envoyé, inscrire dans l’historique</button></dialog>
   <dialog id="message-draft" aria-labelledby="draft-title"><div class="dialog-head"><h2 id="draft-title">Courriel à copier-coller</h2><button type="button" id="draft-close" class="icon-close" aria-label="Fermer le courriel préparé">×</button></div><p id="draft-recipient"></p><label>Objet<input id="draft-subject"></label><label>Message à vérifier<textarea id="draft-body" rows="10"></textarea></label><div class="record-actions"><button type="button" id="copy-draft" class="btn btn-outline">Copier le courriel</button><button type="button" id="mark-message-sent" class="btn" hidden>J’ai envoyé ce message, valider l’étape</button></div><p id="draft-status" role="status" aria-live="polite"></p></dialog>
 </body>
 </html>

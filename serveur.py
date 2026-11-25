@@ -139,7 +139,7 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     return self.respond(200, store.calendar(params.get('year', [str(date.today().year)])[0], private))
                 path = unquote(url.path)
                 relative = {'/': 'index.html', '/admin': 'admin.html', '/equipe-menage': 'equipe-menage.html'}.get(path, path.lstrip('/'))
-                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css', 'relief.js', 'relief.css', 'ui.js')
+                allowed = relative in ('index.html', 'midweek.html', 'site.css', 'site.js', 'favicon.svg', 'booking.js', 'admin.html', 'admin.js', 'booking.css', 'workspace.js', 'workspace.css', 'equipe-menage.html', 'cleaning.js', 'cleaning.css', 'relief.js', 'relief.css', 'ui.js', 'admin-glass.css')
                 static_asset = bool(re.fullmatch(STATIC_ASSETS, relative))
                 allowed = allowed or static_asset or bool(re.fullmatch(r'traces/promenade-12\.(gpx|geojson)', relative))
                 target = (root / relative).resolve()
