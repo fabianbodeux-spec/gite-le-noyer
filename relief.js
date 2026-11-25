@@ -100,6 +100,7 @@ async function buildScene(stage) {
       uBase: { value: base }, uExag: { value: EXAG }, uMin: { value: min }, uMax: { value: max },
       uLow: { value: new THREE.Color(COLORS.low) }, uHigh: { value: new THREE.Color(COLORS.high) },
       uLine: { value: new THREE.Color(COLORS.line) }, uBg: { value: new THREE.Color(COLORS.bg) },
+      uWarm: { value: 0 },
     },
     vertexShader: `
       uniform float uBase; uniform float uExag;
@@ -113,7 +114,7 @@ async function buildScene(stage) {
       }`,
     fragmentShader: `
       uniform float uMin; uniform float uMax;
-      uniform vec3 uLow; uniform vec3 uHigh; uniform vec3 uLine; uniform vec3 uBg;
+      uniform vec3 uLow; uniform vec3 uHigh; uniform vec3 uLine; uniform vec3 uBg; uniform float uWarm;
       varying float vElev; varying vec3 vNormal; varying vec2 vUv; varying float vDepth;
       float contour(float v, float width) {
         float d = abs(fract(v - 0.5) - 0.5) / max(fwidth(v), 1e-4);
@@ -121,10 +122,17 @@ async function buildScene(stage) {
       }
       void main() {
         vec3 n = normalize(vNormal);
-        float light = clamp(dot(n, normalize(vec3(-0.55, 0.75, -0.35))), 0.0, 1.0);
+        // Lumière du matin (froide, haute) vers lumière du soir (dorée, rasante).
+        vec3 dir = normalize(mix(vec3(-0.55, 0.75, -0.35), vec3(0.75, 0.38, 0.25), uWarm));
+        float light = clamp(dot(n, dir), 0.0, 1.0);
         vec3 col = mix(uLow, uHigh, smoothstep(uMin, uMax, vElev)) * (0.55 + 0.65 * light);
-        col = mix(col, uLine, contour(vElev / 10.0, 1.0) * 0.16);
-        col = mix(col, uLine, contour(vElev / 50.0, 1.3) * 0.55);
+        col = mix(col, col * vec3(1.22, 1.02, 0.74), uWarm * 0.55 * light);
+        vec3 line = mix(uLine, vec3(0.97, 0.84, 0.66), uWarm);
+        col = mix(col, line, contour(vElev / 10.0, 1.0) * 0.16);
+        col = mix(col, line, contour(vElev / 50.0, 1.3) * 0.55);
+        // Grain fin, façon carte imprimée.
+        float g = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        col += (g - 0.5) * 0.035;
         vec2 e = min(vUv, 1.0 - vUv);
         float edge = smoothstep(0.0, 0.14, min(e.x, e.y));
         float fogF = smoothstep(9.0, 20.0, vDepth);
@@ -165,6 +173,24 @@ async function buildScene(stage) {
   const startPoint = trail ? point3(trail[0].lat, trail[0].lon, 0) : null;
   const startTop = startPoint ? pin(startPoint, COLORS.line, 0.03) : null;
   const houseAltitude = Math.round(heightAt(housePoint.x, housePoint.z) / 10) * 10;
+
+  // Halo de la maison, comme une fenêtre éclairée.
+  const glowCanvas = document.createElement('canvas');
+  glowCanvas.width = glowCanvas.height = 128;
+  const gctx = glowCanvas.getContext('2d');
+  const grad = gctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,214,170,1)');
+  grad.addColorStop(0.25, 'rgba(240,180,130,.55)');
+  grad.addColorStop(1, 'rgba(210,162,124,0)');
+  gctx.fillStyle = grad;
+  gctx.fillRect(0, 0, 128, 128);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(glowCanvas), transparent: true, depthWrite: false, fog: false,
+    blending: THREE.AdditiveBlending, opacity: 0.35,
+  }));
+  glow.position.copy(houseTop);
+  glow.scale.setScalar(0.42);
+  scene.add(glow);
 
   // Étiquettes HTML positionnées en projection.
   const labels = [];
@@ -217,14 +243,14 @@ async function buildScene(stage) {
   resize();
 
   stage.classList.add('is-ready');
-  return { THREE, view, requestRender, curve, trail, housePoint, startPoint, houseAltitude, scene, yOf, heightAt };
+  return { THREE, view, requestRender, curve, trail, housePoint, startPoint, houseAltitude, scene, yOf, heightAt, material, glow };
 }
 
 /* ---------- Accueil : caméra guidée par le défilement ---------- */
 async function initHome(root) {
   const stage = root.querySelector('[data-relief-stage]');
   const ctx = await buildScene(stage);
-  const { THREE, view, requestRender, housePoint, startPoint } = ctx;
+  const { THREE, view, requestRender, housePoint, startPoint, material, glow } = ctx;
   const mid = startPoint ? housePoint.clone().lerp(startPoint, 0.5) : housePoint.clone();
   const keys = [
     { target: new THREE.Vector3(0, 0.15, 0), radius: 10.5, polar: 0.82, azimuth: -0.55 },
@@ -240,6 +266,10 @@ async function initHome(root) {
     view.radius = a.radius + (b.radius - a.radius) * t;
     view.polar = a.polar + (b.polar - a.polar) * t;
     view.azimuth = a.azimuth + (b.azimuth - a.azimuth) * t;
+    const warm = Math.min(Math.max((p - 0.15) / 0.8, 0), 1);
+    material.uniforms.uWarm.value = warm;
+    glow.material.opacity = 0.3 + 0.7 * warm;
+    glow.scale.setScalar(0.42 + 0.3 * warm);
     const active = Math.min(Math.floor(p * steps.length), steps.length - 1);
     steps.forEach((s, i) => s.toggleAttribute('data-active', i === active));
     requestRender();

@@ -137,3 +137,73 @@ body:has(.booking-panel[open]){overflow:hidden}
 }
 @media(prefers-reduced-motion:reduce){.frame img{transform:none}.reveal{opacity:1}.booking-panel[open]{animation:none}.site-header{transition:none}}
 @media(max-width:520px){#reserver.booking-panel .package-options{grid-template-columns:1fr;gap:10px}#reserver.booking-panel .package-option strong{font-size:21px}}
+
+/* Premium : typographie plus fine */
+body{font-size:18px;line-height:1.7}
+h1,h2{font-weight:320;letter-spacing:-.032em}
+h2{font-size:clamp(2.4rem,4.4vw,4.6rem)}
+.house-text>p,.walk-text p,.closing-layout p,.section-head p{font-size:18px}
+.facts dd{font-variant-numeric:lining-nums}
+
+/* Premium : couleurs unifiées des photos */
+.frame{position:relative;isolation:isolate}
+.frame::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(180deg,rgba(201,162,124,.10),rgba(24,54,40,.10));mix-blend-mode:soft-light}
+.frame img,.gallery-item img,#large-photo{filter:saturate(.84) contrast(1.05) brightness(1.02) sepia(.07)}
+.gallery-item:hover img{filter:saturate(.95) contrast(1.05) brightness(1.03) sepia(.04)}
+.gallery-grid{gap:28px 24px;grid-auto-rows:250px}
+.gallery-item span{font-size:13px;padding:10px 0 0}
+.gallery-item b{display:none}
+
+/* Premium : ouverture mise en scène */
+.opening-title h1 .line{display:block;overflow:hidden;padding-bottom:.06em;margin-bottom:-.06em}
+.opening-title h1 .line>span{display:inline-block}
+.opening-media{position:relative}
+.coords{position:absolute;right:max(24px,calc((100% - 1280px)/2));bottom:20px;z-index:2;margin:0;color:var(--ivory);font-size:13px;letter-spacing:.02em;text-shadow:0 1px 12px rgba(0,0,0,.35)}
+@media(prefers-reduced-motion:no-preference){
+  .opening-title h1 .line>span{animation:line-in 1.05s cubic-bezier(.2,.75,.15,1) both}
+  .opening-title h1 .line:nth-child(2)>span{animation-delay:.12s}
+  .opening-title .location,.opening-text{animation:soft-in .9s ease .45s both}
+  .opening-media .frame{animation:unveil 1.4s cubic-bezier(.65,0,.2,1) .3s both}
+  .coords{animation:soft-in .8s ease 1.3s both}
+}
+@keyframes line-in{from{transform:translateY(105%)}}
+@keyframes soft-in{from{opacity:0}}
+@keyframes unveil{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0)}}
+
+/* Premium : une journée au Noyer */
+.day{padding:clamp(96px,11vw,160px) 0 0}
+.day-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(20px,3vw,44px);margin-top:clamp(40px,5vw,72px);align-items:start}
+.day-item{margin:0}
+.day-item .frame{aspect-ratio:3/4}
+.day-item:nth-child(2){margin-top:clamp(40px,8vw,120px)}
+.day-item:nth-child(3){margin-top:clamp(20px,4vw,60px)}
+.day-item figcaption{margin-top:20px}
+.day-item h3{font-family:var(--display);font-weight:350;font-size:1.7rem;letter-spacing:-.02em}
+.day-item p{margin-top:8px;color:var(--muted);font-size:16px;max-width:34ch}
+
+/* Premium : pied de page monumental */
+.site-footer{padding:clamp(72px,9vw,130px) 0 40px;background:var(--forest);color:var(--ivory);overflow:hidden}
+.footer-inner{width:min(1280px,calc(100% - 96px));margin:auto}
+.footer-brand{display:inline-flex;align-items:center;gap:clamp(16px,2vw,28px);margin-bottom:clamp(40px,5vw,72px);color:var(--ivory)}
+.footer-brand:hover{text-decoration:none}
+.footer-logo{width:clamp(52px,6vw,84px);height:auto;flex:none}
+.footer-mark{font-family:var(--display);font-weight:300;font-size:clamp(3rem,7.5vw,6.5rem);line-height:1;letter-spacing:-.045em;white-space:nowrap}
+.footer-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px;padding-top:32px;border-top:1px solid rgba(248,246,239,.2);font-size:15px}
+.footer-grid p{color:#cdd8cf;line-height:1.75}
+.footer-grid a{text-decoration:underline;text-underline-offset:5px;text-decoration-color:rgba(248,246,239,.35)}
+.footer-grid .brand{text-decoration:none}
+.footer-grid .brand img{width:40px;height:40px;border-radius:11px}
+.footer-grid .brand strong{font-family:var(--display);font-weight:400;font-size:21px}
+.footer-title{font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:.02em;color:#a9bbad;margin-bottom:10px}
+
+@media(max-width:800px){
+  body{font-size:17px}
+  .day-grid{grid-template-columns:1fr;gap:44px}
+  .day-item:nth-child(n){margin-top:0}
+  .day-item .frame{aspect-ratio:4/3}
+  .footer-inner{width:calc(100% - 40px)}
+  .footer-grid{grid-template-columns:1fr 1fr}
+  .footer-grid>div:last-child{grid-column:1/-1}
+  .site-footer{padding-bottom:110px}
+  .coords{right:20px;bottom:14px;font-size:12px}
+}
