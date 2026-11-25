@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f8f6ef">
+  <meta name="theme-color" content="#0c1d15">
+  <link rel="preload" href="/fonts/instrument-sans.woff2" as="font" type="font/woff2" crossorigin>
   <title>Équipe ménage — Le Noyer</title>
   <link rel="icon" href="/favicon.svg">
   <link rel="stylesheet" href="/cleaning.css">
   <script defer src="/cleaning.js"></script>
 </head>
 <body>
-  <header class="clean-top"><a href="/" class="brand"><img src="/favicon.svg" width="42" height="42" alt=""><span><strong>Le Noyer</strong><small>Équipe ménage</small></span></a><a href="/admin">Espace propriétaire</a></header>
+  <header class="clean-top"><a href="/" class="brand"><svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="18" fill="#f1efe6"/><path d="M17 46V18l30 28V18M32 32V14M32 23c-9 0-13-5-13-11 9 0 13 5 13 11Zm0 0c9 0 13-5 13-11-9 0-13 5-13 11Z" fill="none" stroke="#183628" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Le Noyer</strong><small>Équipe ménage</small></span></a><a href="/admin">Espace propriétaire</a></header>
   <main class="clean-main">
     <section id="login-panel" class="clean-login">
-      <p class="eyebrow">ACCÈS ÉQUIPE</p><h1>Les rotations de ménage</h1>
+      <p class="eyebrow">Accès équipe</p><h1>Les rotations de ménage</h1>
       <p>Consultez les départs, les prochaines arrivées et les consignes. Confirmez la réception de chaque demande, puis validez le ménage une fois terminé.</p>
       <form id="login-form"><label for="clean-key">Clé d’accès équipe<input id="clean-key" type="password" autocomplete="current-password" required></label><button class="primary">Ouvrir le planning</button></form>
       <p id="login-status" class="status" role="status" aria-live="polite"></p>
     </section>
     <section id="planning" hidden>
-      <div class="plan-head"><div><p class="eyebrow">ESPACE ÉQUIPE</p><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="task-filter">Suivi<select id="task-filter"><option value="pending">À suivre</option><option value="all">Toutes les rotations</option><option value="transmit">À transmettre</option><option value="receipt">Réception à confirmer</option><option value="clean">Ménage à terminer</option><option value="done">Terminées</option></select></label><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
+      <div class="plan-head"><div><h1>Planning ménage</h1><p id="today-label"></p></div><div class="plan-controls"><label for="task-filter">Suivi<select id="task-filter"><option value="pending">À suivre</option><option value="all">Toutes les rotations</option><option value="transmit">À transmettre</option><option value="receipt">Réception à confirmer</option><option value="clean">Ménage à terminer</option><option value="done">Terminées</option></select></label><button id="refresh" class="secondary" type="button">Actualiser</button><button id="logout" class="secondary" type="button">Fermer</button></div></div>
       <p id="plan-status" class="status" role="status" aria-live="polite"></p>
       <div id="tasks" class="task-list" aria-live="polite"></div>
     </section>
