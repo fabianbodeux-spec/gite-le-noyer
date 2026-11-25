@@ -22,7 +22,7 @@ Ouvrir l’adresse indiquée par le serveur (ports 8040 à 8042). Le formulaire 
 - `site.js` : interactions, navigation des photos et distances au clavier, formulaire et aperçu GPX sans dépendance à une carte externe.
 - `favicon.svg` : monogramme N et feuillage, utilisé pour le logo et le favicon.
 - `relief.js` / `relief.css` : relief 3D (Three.js, sans compilation) de la vallée de la Lienne. Accueil : caméra guidée par le défilement ; randonnées : relief manipulable, tracé GPX drapé et profil altimétrique. Chargé seulement à l’approche de la section ; image ou aperçu SVG de secours sans WebGL ; vue fixe si l’utilisateur réduit les animations.
-- `relief/lienne.bin` : altitudes 200 × 243 (uint16, décimètres) couvrant 50,300–50,370 N et 5,680–5,770 E, issues des Terrain Tiles ouvertes (Mapzen / AWS). La position de la maison (`HOUSE` dans `relief.js`) est celle du hameau de Bierleux : à remplacer par les coordonnées exactes.
+- `relief/lienne.bin` : altitudes 200 × 243 (uint16, décimètres) couvrant 50,300–50,370 N et 5,680–5,770 E, issues des Terrain Tiles ouvertes (Mapzen / AWS). La position de la maison (`HOUSE` dans `relief.js`) est exacte : 50,322867 N, 5,731456 E, environ 390 m d’altitude.
 - `vendor/three.module.min.js` : Three.js r160 (licence MIT, `vendor/three.LICENSE`). `fonts/` : Fraunces et Instrument Sans (licence OFL), hébergées localement.
 
 Les liens depuis les circuits préremplissent le type de séjour et la distance dans la demande. Les catégories 5, 10, 15, 20 et 30 km indiquent des envies de distance ; le kilométrage publié reste visible séparément.

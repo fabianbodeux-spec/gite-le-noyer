@@ -8,8 +8,8 @@ const KM_PER_DEG_LAT = 111.2;
 const WIDTH = (GRID.east - GRID.west) * KM_PER_DEG_LAT * Math.cos((50.335 * Math.PI) / 180);
 const DEPTH = (GRID.north - GRID.south) * KM_PER_DEG_LAT;
 const EXAG = 2.4;
-// Position approximative : hameau de Bierleux (OpenStreetMap). À affiner avec les coordonnées exactes.
-const HOUSE = { lat: 50.3207, lon: 5.7260 };
+// Position exacte de la maison (Rue Bierleux 69A), fournie par le propriétaire.
+const HOUSE = { lat: 50.322867447767734, lon: 5.731455990498798 };
 const COLORS = { bg: 0x183628, low: 0x1d4030, high: 0x47705a, line: 0xf8f6ef, copper: 0xd2a27c };
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
