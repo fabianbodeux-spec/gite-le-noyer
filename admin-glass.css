@@ -204,3 +204,43 @@
 @media(max-width:900px){.erp-body .members-layout{grid-template-columns:1fr}.erp-body .member-row{grid-template-columns:1fr auto}.erp-body .member-meta,.erp-body .member-actions{grid-column:1/-1;justify-content:flex-start}}
 
 .erp-body .login-hint{margin:-4px 0 4px;color:var(--g-muted);font-size:13px}
+
+/* Fiche du dossier : en-tête, prochaine action, parcours, paiements */
+.erp-body .record-head{padding:18px 26px 4px;display:grid;gap:14px}
+.erp-body .record-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.erp-body .record-chip{padding:3px 10px;border-radius:20px;background:var(--glass-hi);color:var(--g-muted);font-size:12px;font-weight:600}
+.erp-body .record-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:0}
+.erp-body .record-fact{padding:10px 12px;border-radius:var(--r-md);background:rgba(0,0,0,.14);border:1px solid var(--edge)}
+.erp-body .record-fact dt{color:var(--g-muted);font-size:12px}
+.erp-body .record-fact dd{margin:2px 0 0;font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.erp-body .record-workspace-grid{padding-top:14px}
+.erp-body .record-next{display:grid;gap:10px;padding:18px 20px;margin-bottom:16px;border-radius:var(--r-lg);border:1px solid rgba(214,165,125,.38);background:linear-gradient(160deg,rgba(214,165,125,.14),rgba(214,165,125,.04))}
+.erp-body .record-next-top{display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
+.erp-body .record-next-label{color:var(--g-copper);font-weight:600}
+.erp-body .record-next-progress{color:var(--g-muted);font-variant-numeric:tabular-nums}
+.erp-body .record-next-title{font:350 22px/1.2 var(--display);letter-spacing:-.015em}
+.erp-body .record-next-due{margin:0;font-size:13px;color:var(--g-muted)}
+.erp-body .record-next-due.is-soon{color:var(--g-amber)}
+.erp-body .record-next-due.is-late{color:var(--g-rose)}
+.erp-body .record-next .btn{justify-self:start}
+.erp-body .progress-state{color:var(--g-faint)!important}
+.erp-body .progress-step.is-complete .progress-state{color:var(--g-sage)!important}
+.erp-body .progress-step.is-pending .progress-dot{background:transparent;border-color:var(--edge-hi)}
+.erp-body .progress-step.is-next{background:rgba(214,165,125,.1);box-shadow:inset 0 0 0 1px rgba(214,165,125,.35)}
+.erp-body .progress-step.is-next .progress-dot{border-color:var(--g-copper);background:var(--g-copper);box-shadow:0 0 0 4px rgba(214,165,125,.18)}
+.erp-body .progress-step.is-next .progress-state{color:var(--g-copper)!important}
+.erp-body .payment-schedule{display:grid;gap:8px;margin:10px 0}
+.erp-body .payment-line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-md);background:rgba(0,0,0,.14);border:1px solid var(--edge)}
+.erp-body .payment-line dt{color:var(--g-muted);font-size:12.5px}
+.erp-body .payment-line dd{margin:0;display:flex;align-items:center;gap:10px}
+.erp-body .payment-line strong{font:350 17px var(--display)}
+.erp-body .payment-state{font-size:12px;font-weight:600;color:var(--g-amber)}
+.erp-body .payment-state.is-ok{color:var(--g-sage)}
+.erp-body .payment-state.is-late{color:var(--g-rose)}
+.erp-body .payment-fold,.erp-body .record-more{margin-top:12px;border-top:1px solid var(--edge);padding-top:10px}
+.erp-body .payment-fold>summary,.erp-body .record-more>summary{cursor:pointer;color:var(--g-copper);font-weight:600;font-size:13.5px;min-height:36px;display:flex;align-items:center}
+.erp-body .record-more>summary{color:var(--g-muted)}
+.erp-body .record-extra{margin-top:12px}
+.erp-body .record-extra h3{font:350 17px var(--display);margin:0 0 8px}
+.erp-body .record-followup h3{margin-top:0}
+@media(max-width:760px){.erp-body .record-head{padding:14px 16px 0}.erp-body .record-summary-grid{grid-template-columns:1fr 1fr}}

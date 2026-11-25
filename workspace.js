@@ -4,7 +4,7 @@
   const statuses = {pending:'En attente',confirmed:'Confirmée',cancelled:'Annulée',rejected:'Refusée'};
   const directFlags = {access_sent:'Informations d’accès transmises',reception_ready:'Accueil préparé',cleaning_done:'Ménage effectué'};
   const externalFlags = {reception_ready:'Accueil préparé',cleaning_done:'Ménage effectué'};
-  const money = value => value===null?'À compléter':new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(value/100);
+  const money = value => value===null?'À compléter':new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(value/100).replace(/\u202f/g,'\u00a0');
   const dateLabel = value => new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium'}).format(new Date(value+'T12:00:00'));
   const dateInput = value => new Intl.DateTimeFormat('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(new Date(value+'T12:00:00'));
   const daysUntil = value => {
@@ -46,22 +46,24 @@
   function focusWorkspace(selector) {
     const target=element('record-dialog').querySelector(selector);
     if(!target)return false;
+    const folded=target.closest('details');if(folded)folded.open=true;
     target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'});
     target.focus({preventScroll:true});
     return true;
   }
-  function appendProgress(parent,row) {
+  function appendProgress(parent,row,handlers={}) {
     const panel=document.createElement('section');panel.className='progress-panel';
     const heading=document.createElement('div');heading.className='progress-heading';
-    text(heading,'h3','Progression du dossier');
+    text(heading,'h3','Parcours du dossier');
+    const pending=[];
     const list=document.createElement('ol');list.className='progress-list';
     const add=(label,done,activate,detail='')=>{
       const item=document.createElement('li');
       const action=text(item,done?'div':'button','',`progress-step ${done?'is-complete':'is-pending'}`);if(!done)action.type='button';
       const dot=document.createElement('span');dot.className='progress-dot';dot.setAttribute('aria-hidden','true');
       const copy=document.createElement('span');copy.className='progress-copy';text(copy,'strong',label);if(detail)text(copy,'small',detail);
-      const state=text(action,'span',done?'Validé':'À valider','progress-state');action.append(dot,copy,state);
-      if(!done){action.addEventListener('click',async()=>{action.disabled=true;const feedback=element('record-action-feedback');if(feedback)feedback.hidden=true;try{await activate()}catch(error){reportActionError(error)}finally{action.disabled=false}});action.setAttribute('aria-label',label+' — à valider. Ouvrir cette étape.')}item.append(action);list.append(item);
+      const state=text(action,'span',done?'Fait':'À venir','progress-state');action.append(dot,copy,state);if(!done)pending.push({label,activate,action,state});
+      if(!done){action.addEventListener('click',async()=>{action.disabled=true;const feedback=element('record-action-feedback');if(feedback)feedback.hidden=true;try{await activate()}catch(error){reportActionError(error)}finally{action.disabled=false}});action.setAttribute('aria-label',label+', à faire. Lancer cette étape.')}item.append(action);list.append(item);
     };
     if(row.source==='direct'){
       const quoteSent=sentMessage(row,'quote'),hasPayments=(row.payments||[]).length>0;
@@ -72,8 +74,6 @@
       }
       if(row.has_quote){
         const fullyPaid=Number(row.balance_cents||0)<=0;
-        add(fullyPaid?'Paiement intégral réceptionné':Number(row.paid_cents||0)>0?'Solde à enregistrer':'Paiement à enregistrer',fullyPaid,
-          ()=>focusWorkspace('#payment-amount'),fullyPaid?'Règlement complet saisi':'À rapprocher avec le relevé bancaire');
         const payments=row.payments||[];
         const settlementEvent=(row.timeline||[]).find(event=>event.event_type==='payment_validated'&&
           (event.details?.fully_paid||Number(event.details?.balance_cents)===0));
@@ -84,6 +84,8 @@
           add(receiptSent?'Courriel de paiement envoyé':'Courriel de paiement à envoyer',receiptSent,
             ()=>prepare(row,'payment',payment.id),money(payment.amount_cents)+' · '+dateLabel(String(payment.verified_at).slice(0,10)));
         });
+        add(fullyPaid?'Paiement intégral reçu':Number(row.paid_cents||0)>0?'Solde à enregistrer':'Acompte à enregistrer',fullyPaid,
+          ()=>focusWorkspace('#payment-amount'),fullyPaid?'Règlement complet saisi':(row.payment_plan&&!fullyPaid&&Number(row.paid_cents||0)>0?'À recevoir avant le '+dateLabel(row.payment_plan.balance_due):'À rapprocher avec le relevé bancaire'));
         const confirmationSent=(row.timeline||[]).some(event=>['reservation_confirmation_sent_manually','reservation_confirmation_email_sent'].includes(event.event_type));
         const arrivalSent=(row.timeline||[]).some(event=>['arrival_information_sent_manually','arrival_information_email_sent'].includes(event.event_type));
         if(combinedEmail){
@@ -97,23 +99,33 @@
             add(confirmationAndArrivalSent?'Confirmation et informations d’arrivée envoyées':'Confirmation et informations d’arrivée à envoyer',confirmationAndArrivalSent,
               ()=>prepare(row,'arrival'),confirmationAndArrivalSent?'Un seul courriel confirmé':'Préparez le message de confirmation et d’arrivée');
           }
-          [['access_sent','Informations d’accès à transmettre'],['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>{
-            const complete=key==='access_sent'?(Boolean(row.checklist?.[key])||arrivalSent):Boolean(row.checklist?.[key]);
-            const stepLabel=key==='access_sent'&&complete?'Informations d’accès envoyées':label;
-            add(stepLabel,complete,key==='access_sent'?()=>prepare(row,'arrival'):()=>focusWorkspace('#workflow-flag-'+key));
+          [['reception_ready','Accueil à préparer','Accueil préparé','Cliquez quand la maison est prête'],['cleaning_done','Ménage à valider','Ménage validé','Cliquez une fois le ménage terminé']].forEach(([key,label,doneLabel,hint])=>{
+            const complete=Boolean(row.checklist?.[key]);
+            add(complete?doneLabel:label,complete,()=>setFlag(row,key),complete?'':hint);
           });
         }
       }
     } else {
-      if(row.status==='pending')add('Dates à valider',false,()=>{if(!focusWorkspace('#record-confirm-dates')&&!focusWorkspace('#record-conflict'))focusWorkspace('#record-edit-dates')},'Vérifiez les dates et les chevauchements');
+      if(row.status==='pending')add('Dates à valider',false,handlers.confirm||(()=>{if(!focusWorkspace('#record-conflict'))editInquiry(row)}),row.conflict?'Ces dates chevauchent une autre réservation':'Vérifiez puis bloquez les dates');
       if(row.status==='confirmed'){
-        [['reception_ready','Accueil à préparer'],['cleaning_done','Ménage à valider']].forEach(([key,label])=>
-          add(label,Boolean(row.checklist?.[key]),()=>focusWorkspace('#workflow-flag-'+key)));
+        [['reception_ready','Accueil à préparer','Accueil préparé','Cliquez quand la maison est prête'],['cleaning_done','Ménage à valider','Ménage validé','Cliquez une fois le ménage terminé']].forEach(([key,label,doneLabel,hint])=>{
+          const complete=Boolean(row.checklist?.[key]);
+          add(complete?doneLabel:label,complete,()=>setFlag(row,key),complete?'':hint);
+        });
       }
     }
-    if(!list.children.length)text(panel,'p','Aucune étape à valider pour ce dossier.','progress-empty');
+    if(!list.children.length)text(panel,'p','Aucune étape à suivre pour ce dossier.','progress-empty');
     else panel.append(heading,list);
+    if(pending[0]){pending[0].action.classList.add('is-next');pending[0].state.textContent='Maintenant'}
     parent.append(panel);
+    return pending[0]||null;
+  }
+  // Coche une étape (accueil, ménage) en un clic, sans formulaire à enregistrer.
+  async function setFlag(row,key){
+    const payload=workflowPayload(row);payload.checklist[key]=true;
+    await api('requests/'+row.id+'/workflow',payload);await refresh();
+    const updated=current.records.find(record=>record.id===row.id);if(updated)showRecord(updated);
+    notice(key==='cleaning_done'?'Ménage validé.':'Accueil préparé.');
   }
   const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Demande transmise à l’équipe ménage',cleaning_request_received:'Demande de ménage reçue par l’équipe',cleaning_completed_by_team:'Ménage terminé — équipe',arrival_time_updated:'Heure d’arrivée actualisée',departure_time_updated:'Heure de départ actualisée'};
   function appendTimeline(parent,row) {
@@ -147,14 +159,25 @@
   }
   function appendPayments(parent,row) {
     const panel=document.createElement('section');panel.className='payment-panel';text(panel,'h3','Paiements');
-    text(panel,'p','Reçu : '+money(row.paid_cents)+' · Solde : '+money(row.balance_cents),'payment-summary');
+    const plan=row.payment_plan;
+    if(plan){
+      const schedule=document.createElement('dl');schedule.className='payment-schedule';
+      const paid=Number(row.paid_cents||0),depositOk=paid>=plan.deposit_cents,fullyPaid=Number(row.balance_cents||0)<=0;
+      const late=!fullyPaid&&current.today>plan.balance_due;
+      const line=(label,amount,stateLabel,tone)=>{const item=document.createElement('div');item.className='payment-line';text(item,'dt',label);const value=document.createElement('dd');text(value,'strong',money(amount));text(value,'span',stateLabel,'payment-state'+(tone?' is-'+tone:''));item.append(value);schedule.append(item)};
+      line('Acompte '+plan.deposit_percent+' %, non remboursable',plan.deposit_cents,depositOk?'Reçu':'En attente',depositOk?'ok':'');
+      line('Solde, dû le '+dateLabel(plan.balance_due),Math.max(0,row.total_cents-plan.deposit_cents),fullyPaid?'Reçu':late?'En retard':'À recevoir',fullyPaid?'ok':late?'late':'');
+      panel.append(schedule);
+    }
+    text(panel,'p','Déjà reçu : '+money(row.paid_cents)+'. Reste à recevoir : '+money(row.balance_cents)+'.','payment-summary');
     const list=document.createElement('ul');(row.payments||[]).forEach(payment=>{const item=document.createElement('li');let when=payment.verified_at;try{when=new Intl.DateTimeFormat('fr-BE',{dateStyle:'medium'}).format(new Date(payment.verified_at))}catch{};text(item,'span',money(payment.amount_cents)+' · '+when+' · '+({transfer:'Virement',card:'Carte',cash:'Espèces',other:'Autre'}[payment.method]||payment.method));if(payment.reference)text(item,'span','Réf. '+payment.reference);if(!payment.message_sent&&!sentMessage(row,'payment',payment.id))button(item,'Préparer le courriel',()=>prepare(row,'payment',payment.id),'btn btn-outline');list.append(item)});if(list.children.length)panel.append(list);
     if(row.has_quote&&row.email&&row.status!=='cancelled'&&row.status!=='rejected'&&row.balance_cents>0){
+      const fold=document.createElement('details');fold.className='payment-fold';text(fold,'summary','Enregistrer un paiement reçu');
       const form=document.createElement('form');form.className='payment-form';form.id='payment-form';const fields=document.createElement('div');fields.className='payment-fields';
       const amountLabel=text(fields,'label','Montant reçu (€)'),amount=document.createElement('input');amount.id='payment-amount';amount.type='number';amount.min='0.01';amount.max=(row.balance_cents/100).toFixed(2);amount.step='0.01';amount.required=true;amount.inputMode='decimal';amountLabel.append(amount);
       const methodLabel=text(fields,'label','Mode de paiement'),method=document.createElement('select');[['transfer','Virement bancaire'],['card','Carte'],['cash','Espèces'],['other','Autre']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;method.append(option)});methodLabel.append(method);
       const refLabel=text(fields,'label','Référence (facultatif)'),reference=document.createElement('input');reference.maxLength=150;refLabel.append(reference);fields.append(amountLabel,methodLabel,refLabel);form.append(fields);
-      const save=text(form,'button','Valider le paiement');save.type='submit';save.className='btn';const status=text(form,'p','Après validation, le reçu et, si la réservation est confirmée, les informations d’arrivée seront préparés pour être copiés dans votre messagerie.');status.setAttribute('role','status');form.append(save,status);
+      const save=text(form,'button','Valider le paiement');save.type='submit';save.className='btn';const status=text(form,'p','Après validation, le message de confirmation est préparé pour être copié dans votre messagerie.');status.setAttribute('role','status');form.append(save,status);
       form.addEventListener('submit',async event=>{
         event.preventDefault();if(!amount.reportValidity())return;save.disabled=true;
         let result;
@@ -168,7 +191,7 @@
         else notice(result.reservation_confirmed?'Paiement validé et réservation confirmée. Le courriel est prêt à copier.':'Paiement enregistré. Le courriel est prêt à copier.');
         save.disabled=false;
       });
-      panel.append(form);
+      fold.append(form);panel.append(fold);
     }
     parent.append(panel);
   }
@@ -212,72 +235,115 @@
     if(activePage!=='dossiers')showPage(row.source==='direct'?'site-requests':'reservations',true);
     const dialog=element('record-dialog'),content=element('record-content');content.replaceChildren();
     const actionFeedback=text(content,'p','');actionFeedback.id='record-action-feedback';actionFeedback.className='workspace-warning';actionFeedback.setAttribute('role','alert');actionFeedback.hidden=true;
-    element('record-title').textContent=(row.name||sources[row.source]||'Séjour')+' · n° '+row.id;
+    element('record-title').textContent=row.name||sources[row.source]||'Séjour';
+    const eyebrow=dialog.querySelector('.dialog-head .erp-eyebrow');if(eyebrow)eyebrow.textContent='Dossier n° '+row.id;
     content.className='record-workspace';
+    const direct=row.source==='direct';
+    const nights=Math.round((new Date(row.departure+'T12:00:00')-new Date(row.arrival+'T12:00:00'))/86400000);
+    const hour=value=>{const [h,m]=(value||'').slice(0,5).split(':');return Number(h)+' h'+(m&&m!=='00'?' '+m:'')};
+
+    // En-tête : état, origine, alerte éventuelle, puis les informations clés présentées de la même façon pour tous les dossiers.
+    const head=document.createElement('div');head.className='record-head';
+    const chips=document.createElement('div');chips.className='record-chips';
+    text(chips,'span',statusLabel(row),'record-status status-'+row.status);
+    text(chips,'span',direct?'Site Le Noyer':sources[row.source]||'Autre','record-chip');
+    if(row.conflict)text(chips,'span','Dates en conflit','record-status status-conflict');
+    head.append(chips);
+    const summary=document.createElement('dl');summary.className='record-summary-grid';
+    const facts=[['Séjour',dateLabel(row.arrival)+' → '+dateLabel(row.departure)+', '+nights+' nuit'+(nights>1?'s':'')],
+      ['Horaires','Arrivée '+hour(row.arrival_time||'17:00')+', départ '+hour(row.departure_time||'09:00')],
+      ['Voyageurs',row.guests+' personnes']];
+    if(direct)facts.push(['Montant',money(row.total_cents)],['E-mail',row.email||'À compléter']);
+    else facts.push(['Référence',row.reference||'Non renseignée'],['Contact',row.email||'Non renseigné']);
+    facts.forEach(([label,value])=>{const item=document.createElement('div');item.className='record-fact';text(item,'dt',label);text(item,'dd',value);summary.append(item)});
+    head.append(summary);content.append(head);
+
     const grid=document.createElement('div');grid.className='record-workspace-grid';
-    const reading=document.createElement('main');reading.className='record-reading';
+    const reading=document.createElement('div');reading.className='record-reading';
     const aside=document.createElement('aside');aside.className='record-control';
-    const status=text(reading,'span',statusLabel(row),'record-status status-'+row.status);
-    const summary=document.createElement('div');summary.className='record-summary-grid';
-    const facts=row.source==='direct' ? [
-      ['Séjour',dateLabel(row.arrival)+' → '+dateLabel(row.departure)],['Voyageurs',row.guests+' personnes'],
-      ['Montant',money(row.total_cents)],['E-mail',row.email||'À compléter']
-    ] : [
-      ['Plateforme',sources[row.source]||'Autre'],['Référence',row.reference||'Non renseignée'],
-      ['Arrivée',dateInput(row.arrival)],['Départ',dateInput(row.departure)],['Voyageurs',row.guests+' personnes'],
-      ['Contact',row.email||'Non renseigné']
-    ];
-    facts.forEach(([label,value])=>{const item=document.createElement('div');item.className='record-fact';text(item,'span',label);text(item,'strong',value);summary.append(item)});
-    reading.append(status,summary);
-    if(row.conflict){const warning=text(reading,'p','Ces dates chevauchent une autre réservation ou un blocage. Vérifie le calendrier avant de valider.','workspace-warning record-alert');warning.id='record-conflict'}
-    if(row.message){const original=document.createElement('details');original.className='record-source-message';text(original,'summary',row.source==='direct'?'Message du client':'Note / message de la plateforme');text(original,'p',row.message,'original-message');reading.append(original)}
-    appendProgress(aside,row);
-    const actions=document.createElement('div');actions.className='record-actions record-dialog-actions';aside.append(actions);
-    if(row.source!=='direct'&&row.status==='pending'){const edit=button(actions,'Modifier les dates / informations',()=>editInquiry(row),'btn btn-outline');edit.id='record-edit-dates'}
-    if(row.status==='pending'&&row.confirmable&&!row.conflict){const confirmDates=button(actions,row.source==='direct'?'Confirmer la réservation':'Valider les dates',async()=>{
+
+    // Valider ou confirmer les dates : utilisé par la prochaine action et par le parcours.
+    const canConfirm=row.status==='pending'&&row.confirmable&&!row.conflict;
+    const confirmDates=canConfirm?async()=>{
       await api('requests/'+row.id+'/status',{status:'confirmed'});
       try{await refresh()}catch(error){reportActionError(new Error('Réservation confirmée, mais l’affichage n’a pas pu être actualisé. Cliquez sur Actualiser. '+error.message));return}
       const updated=current.records.find(record=>record.id===row.id);
-      if(updated){showRecord(updated);if(row.source==='direct'){
-        try{await prepare(updated,'arrival')}catch(error){reportActionError(new Error('Réservation confirmée. Le courriel d’arrivée n’a pas été préparé : '+error.message));return}
-      }}
-      notice(row.source==='direct'?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.');
-    },'btn');confirmDates.id='record-confirm-dates'}
-    if(row.status==='pending'&&row.source==='direct')button(actions,'Refuser la demande',async()=>{if(!window.confirm('Refuser cette demande du site ?'))return;await api('requests/'+row.id+'/status',{status:'rejected'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);await prepare(updated,'rejection')}},'btn btn-muted');
-    if(row.status==='confirmed')button(actions,row.source==='direct'?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=row.source==='direct'?'Annuler cette réservation et libérer les dates ?':'Confirme que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(row.source==='direct')await prepare(updated,'cancellation')}},'btn btn-muted');
-    if(row.source==='direct'){
-      const drafts=document.createElement('div');drafts.className='record-actions record-draft-actions';aside.append(drafts);
-      if(row.package&&['pending','confirmed'].includes(row.status)&&!row.conflict){
-        const quoteSent=sentMessage(row,'quote'),paymentReceived=(row.payments||[]).length>0;
-        const quoteAction=button(drafts,quoteSent?'Devis déjà envoyé':paymentReceived?'Paiement reçu — devis clôturé':'Préparer le devis',()=>prepare(row,'quote'),'btn btn-outline');
-        quoteAction.id='quote-action';quoteAction.disabled=quoteSent||paymentReceived;
+      if(updated){showRecord(updated);if(direct){try{await prepare(updated,'arrival')}catch(error){reportActionError(new Error('Réservation confirmée. Le courriel d’arrivée n’a pas été préparé : '+error.message));return}}}
+      notice(direct?'Réservation confirmée. Le courriel d’arrivée est prêt à copier.':'Dates validées et bloquées dans le calendrier.');
+    }:null;
+
+    // Parcours (colonne de droite) : une seule liste d'étapes, chacune lance sa propre action.
+    const next=appendProgress(aside,row,{confirm:confirmDates});
+
+    // Prochaine action : la seule action principale de la fiche.
+    const state=dossierState(row);
+    const nextCard=document.createElement('section');nextCard.className='record-next';
+    if(state){
+      const top=document.createElement('div');top.className='record-next-top';
+      text(top,'span','Prochaine action','record-next-label');text(top,'span',state.progress+' % du parcours','record-next-progress');nextCard.append(top);
+      const bar=document.createElement('span');bar.className='dossier-bar';const fill=document.createElement('i');fill.style.width=state.progress+'%';bar.append(fill);nextCard.append(bar);
+      text(nextCard,'strong',next?next.label:state.next,'record-next-title');
+      // L'échéance n'est affichée que si elle concerne bien l'étape proposée.
+      const sameStep=!next||next.label===state.next||(/Solde|Acompte/.test(next.label)&&/Solde|acompte/.test(state.next));
+      if(state.due&&sameStep)text(nextCard,'p',(state.tone==='late'?'En retard : ':'Échéance : ')+dueText(state),'record-next-due'+(state.tone?' is-'+state.tone:''));
+      else if(next)text(nextCard,'p','À faire dès maintenant.','record-next-due');
+      if(next){
+        const verb=/Courriel|courriel|message|Confirmation|Devis|devis/.test(next.label)?'Préparer le message':/Solde|Acompte|Paiement/.test(next.label)?'Enregistrer le paiement':/Dates/.test(next.label)?'Valider les dates':'Marquer comme fait';
+        const go=button(nextCard,verb,next.activate,'btn');go.id=row.status==='pending'&&!direct?'record-confirm-dates':'record-next-action';
       }
-      if(row.status==='pending'){
-        button(drafts,'Préparer une relance',()=>prepare(row,'followup'),'btn btn-outline');
-      }
-      if(row.conflict)button(drafts,'Réponse indisponible',()=>prepare(row,'unavailable'),'btn btn-outline');
-      if(row.status==='confirmed'&&row.package)button(drafts,'Préparer la confirmation et les informations d’arrivée',()=>prepare(row,'arrival'),'btn btn-outline');
-      if(row.status==='rejected')button(drafts,'Préparer la réponse de refus',()=>prepare(row,'rejection'),'btn btn-outline');
-      if(row.status==='cancelled')button(drafts,'Préparer la confirmation d’annulation',()=>prepare(row,'cancellation'),'btn btn-outline');
+    } else {
+      text(nextCard,'span','Dossier','record-next-label');
+      text(nextCard,'strong',row.status==='cancelled'?'Réservation annulée':row.status==='rejected'?'Demande refusée':'Dossier terminé','record-next-title');
     }
-    if(row.source==='direct'&&row.has_quote)appendPayments(aside,row);
-    const form=document.createElement('form');form.className='record-followup';text(form,'h3',row.source==='direct'?'Progression du dossier':'Préparation du séjour');
-    if(row.source==='direct')text(form,'p','Coordonnées '+(row.name&&row.email?'complètes':'à compléter')+' · Devis '+(row.has_quote?'préparé':'à compléter')+' · '+statusLabel(row));
-    else text(form,'p',row.status==='confirmed'?'Cochez les étapes lorsqu’elles sont prêtes. Le suivi commercial reste géré par la plateforme.':'Validez les dates après avoir vérifié les chevauchements.');
-    const flags=row.source==='direct'?directFlags:externalFlags;
-    form.id='workflow-form';Object.entries(flags).forEach(([key,label])=>{const wrapper=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.id='workflow-flag-'+key;input.name=key;input.checked=Boolean(row.checklist[key]);wrapper.append(input,document.createTextNode(label));form.append(wrapper)});
-    const noteLabel=document.createElement('label');noteLabel.textContent='Note privée pour l’équipe';const notes=document.createElement('textarea');notes.name='notes';notes.rows=3;notes.maxLength=4000;notes.value=row.notes;noteLabel.append(notes);form.append(noteLabel);
+    reading.append(nextCard);
+
+    if(row.conflict){const warning=text(reading,'p','Ces dates chevauchent une autre réservation ou un blocage. Vérifiez le calendrier avant de valider.','workspace-warning record-alert');warning.id='record-conflict'}
+    if(row.message){const original=document.createElement('details');original.className='record-source-message';text(original,'summary',direct?'Message du client':'Note de la plateforme');text(original,'p',row.message,'original-message');reading.append(original)}
+
+    // Notes : privées ou destinées à l'équipe ménage, enregistrées à part.
+    const form=document.createElement('form');form.className='record-followup';form.id='workflow-form';text(form,'h3','Notes');
+    const noteLabel=document.createElement('label');noteLabel.textContent='Note privée';const notes=document.createElement('textarea');notes.name='notes';notes.rows=3;notes.maxLength=4000;notes.value=row.notes;notes.placeholder='Visible uniquement dans l’espace propriétaire';noteLabel.append(notes);form.append(noteLabel);
+    let cleaningNote=null;
     if(row.status==='confirmed'){
-      const cleaningLabel=document.createElement('label');cleaningLabel.textContent='Consignes destinées à l’équipe de nettoyage';const cleaningNote=document.createElement('textarea');cleaningNote.name='cleaning_note';cleaningNote.rows=4;cleaningNote.maxLength=2000;cleaningNote.value=row.cleaning_note||'';cleaningNote.placeholder='Ex. attention au poêle, linge à laisser dans le local…';cleaningLabel.append(cleaningNote);form.append(cleaningLabel);
-      text(form,'p','Ces consignes seront incluses dans le message de partage. La note privée reste confidentielle.','form-hint');
+      const cleaningLabel=document.createElement('label');cleaningLabel.textContent='Consignes pour l’équipe ménage';cleaningNote=document.createElement('textarea');cleaningNote.name='cleaning_note';cleaningNote.rows=3;cleaningNote.maxLength=2000;cleaningNote.value=row.cleaning_note||'';cleaningNote.placeholder='Ex. attention au poêle, linge à laisser dans le local…';cleaningLabel.append(cleaningNote);form.append(cleaningLabel);
     }
-    const save=text(form,'button','Enregistrer le suivi');save.type='submit';save.className='btn btn-outline';
-    const statusText=text(form,'p','');statusText.setAttribute('role','status');statusText.setAttribute('aria-live','polite');
+    const save=text(form,'button','Enregistrer les notes');save.type='submit';save.className='btn btn-outline';save.disabled=true;
+    const statusText=text(form,'p','','form-hint');statusText.setAttribute('role','status');statusText.setAttribute('aria-live','polite');
+    form.addEventListener('input',()=>{save.disabled=false;statusText.textContent='Modifications non enregistrées.'});
     form.addEventListener('submit',async event=>{event.preventDefault();save.disabled=true;try{
-      const checklist=Object.fromEntries(Object.keys(flags).map(key=>[key,form.elements.namedItem(key).checked]));
-      await api('requests/'+row.id+'/workflow',{version:row.version,notes:notes.value,cleaning_note:form.elements.namedItem('cleaning_note')?.value||row.cleaning_note||'',checklist});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated)showRecord(updated);notice('Suivi du séjour n° '+row.id+' enregistré.');
-    }catch(error){statusText.textContent=error.message}finally{save.disabled=false}});
-    aside.append(form);appendTimeline(reading,row);grid.append(reading,aside);content.append(grid);
+      await api('requests/'+row.id+'/workflow',{...workflowPayload(row),notes:notes.value,cleaning_note:cleaningNote?cleaningNote.value:(row.cleaning_note||'')});
+      await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated)showRecord(updated);notice('Notes du dossier enregistrées.');
+    }catch(error){statusText.textContent=error.message;save.disabled=false}});
+    reading.append(form);
+    appendTimeline(reading,row);
+
+    // Paiements (dossiers du site).
+    if(direct&&row.has_quote)appendPayments(aside,row);
+
+    // Messages ponctuels, non couverts par le parcours.
+    if(direct){
+      const drafts=document.createElement('section');drafts.className='record-extra';
+      const items=[];
+      if(row.status==='pending'&&!row.conflict)items.push(['Préparer une relance',()=>prepare(row,'followup')]);
+      if(row.conflict)items.push(['Répondre que les dates sont indisponibles',()=>prepare(row,'unavailable')]);
+      if(row.status==='rejected')items.push(['Préparer la réponse de refus',()=>prepare(row,'rejection')]);
+      if(row.status==='cancelled')items.push(['Préparer la confirmation d’annulation',()=>prepare(row,'cancellation')]);
+      if(items.length){text(drafts,'h3','Messages');const box=document.createElement('div');box.className='record-actions';items.forEach(([label,fn])=>button(box,label,fn,'btn btn-outline'));drafts.append(box);aside.append(drafts)}
+    }
+
+    // Autres actions : modifications et annulations, volontairement discrètes.
+    const others=[];
+    if(!direct&&row.status==='pending')others.push(['Modifier les dates ou les informations',()=>editInquiry(row),'record-edit-dates']);
+    if(row.status==='pending'&&direct)others.push(['Refuser la demande',async()=>{if(!window.confirm('Refuser cette demande du site ?'))return;await api('requests/'+row.id+'/status',{status:'rejected'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);await prepare(updated,'rejection')}}]);
+    if(row.status==='confirmed')others.push([direct?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=direct?'Annuler cette réservation et libérer les dates ?':'Confirmez que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(direct)await prepare(updated,'cancellation')}}]);
+    if(others.length){
+      const more=document.createElement('details');more.className='record-more';text(more,'summary','Autres actions');
+      const box=document.createElement('div');box.className='record-actions';
+      others.forEach(([label,fn,id])=>{const node=button(box,label,fn,'btn btn-muted');if(id)node.id=id});
+      more.append(box);aside.append(more);
+    }
+
+    grid.append(reading,aside);content.append(grid);
     if(!dialog.open)dialog.showModal();
   }
   function openRecord(identifier) {
