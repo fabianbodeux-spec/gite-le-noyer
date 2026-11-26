@@ -128,8 +128,11 @@ class Store:
             initialize_operations(connection)
 
     def unavailable(self, connection, arrival, departure, exclude=0):
-        booked = connection.execute('''SELECT id FROM demandes WHERE status='confirmed'
-            AND arrival < ? AND departure > ? AND id != ?''', (departure, arrival, exclude)).fetchone()
+        # Une réservation de plateforme est déjà ferme chez la plateforme : elle bloque les dates dès son enregistrement.
+        booked = connection.execute('''SELECT demandes.id FROM demandes
+            LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
+            WHERE (demandes.status='confirmed' OR (demandes.status='pending' AND COALESCE(workflow.source,'direct')!='direct'))
+            AND demandes.arrival < ? AND demandes.departure > ? AND demandes.id != ?''', (departure, arrival, exclude)).fetchone()
         blocked = connection.execute('''SELECT id FROM blocks WHERE active=1
             AND start < ? AND end > ?''', (departure, arrival)).fetchone()
         return bool(booked or blocked)
@@ -225,7 +228,10 @@ class Store:
             if row['status'] not in ('pending', 'confirmed') or (row['status'] == 'confirmed' and status != 'cancelled'):
                 raise BookingError("Cette transition de statut n’est pas autorisée.", 409)
             if status == 'confirmed':
-                dates(row['arrival'], row['departure'])
+                # Un séjour de plateforme déjà commencé peut encore être validé, pas un séjour terminé.
+                start, end = dates(row['arrival'], row['departure'], future=row['source'] == 'direct')
+                if end <= date.today():
+                    raise BookingError("Ce séjour est déjà terminé : validation impossible.", 409)
                 if row['source'] == 'direct':
                     if not row['name'] or not row['email']:
                         raise BookingError('Complétez le nom et l’e-mail du voyageur avant confirmation.', 409)
@@ -238,6 +244,9 @@ class Store:
                 if self.unavailable(connection, row['arrival'], row['departure'], identifier):
                     raise BookingError("Ces dates sont déjà occupées : confirmation impossible.", 409)
             connection.execute('UPDATE demandes SET status=? WHERE id=?', (status, identifier))
+            if status == 'cancelled':
+                # Libère l'empreinte anti-doublon : le séjour pourra être réenregistré.
+                connection.execute('UPDATE booking_workflows SET fingerprint=NULL WHERE booking_id=?', (identifier,))
             event_type={
                 'confirmed':'reservation_confirmed' if row['source']=='direct' else 'external_dates_validated',
                 'cancelled':'reservation_cancelled',
@@ -262,12 +271,16 @@ class Store:
         start, end = f'{year}-01-01', f'{year+1}-01-01'
         with self.connection() as connection:
             rates = [dict(row) for row in connection.execute('SELECT * FROM package_rates WHERE active=1 AND start < ? AND end > ? ORDER BY start', (end, start))]
-            bookings = [dict(row) for row in connection.execute('''SELECT demandes.*,COALESCE(workflow.source,'direct') AS source
+            bookings = [dict(row) for row in connection.execute('''SELECT demandes.*,COALESCE(workflow.source,'direct') AS source,
+                workflow.platform_cents
                 FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
                 WHERE arrival < ? AND departure > ? ORDER BY arrival,id''', (end, start))]
             blocks = [dict(row) for row in connection.execute('SELECT * FROM blocks WHERE active=1 AND start < ? AND end > ?', (end, start))]
         days, revenue, occupied = [], 0, 0
         for booking in bookings:
+            if booking['status'] == 'confirmed' and booking['source'] != 'direct' and booking['platform_cents']:
+                if start <= booking['arrival'] < end:
+                    revenue += booking['platform_cents']
             if booking['status'] == 'confirmed' and booking['source'] == 'direct' and booking['quote_json']:
                 quote = json.loads(booking['quote_json'])
                 if quote.get('package') in PACKAGES:
@@ -281,7 +294,8 @@ class Store:
         while current.year == year:
             night = current.isoformat()
             rate = next((rate for rate in rates if rate['start'] <= night < rate['end']), None)
-            reserved = any(row['status'] == 'confirmed' and row['arrival'] <= night < row['departure'] for row in bookings)
+            reserved = any((row['status'] == 'confirmed' or (row['status'] == 'pending' and row['source'] != 'direct'))
+                           and row['arrival'] <= night < row['departure'] for row in bookings)
             blocked = any(row['start'] <= night < row['end'] for row in blocks)
             occupied += int(reserved)
             state = 'occupied' if reserved or blocked else 'unpriced' if not rate else 'available'

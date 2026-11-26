@@ -267,7 +267,7 @@ def make_handler(store, admin_token, root=ROOT, cleaner_token=''):
                     if match[2] == 'payment':
                         return self.respond(200, operations.record_payment(int(match[1]), data))
                     if match[2] == 'cleaning-notified':
-                        return self.respond(200, operations.mark_cleaning_team_notified(int(match[1]),data.get('channel')))
+                        return self.respond(200, operations.mark_cleaning_team_notified(int(match[1]),data.get('channel'),data.get('kind') or 'rotation'))
                     return self.respond(200, operations.mark_message_sent(int(match[1]), data))
                 match = re.fullmatch(r'/api/admin/requests/(\d+)/status', path)
                 if match:

@@ -9,7 +9,7 @@ from reservations import BookingError, PACKAGES, cents, dates, integer, parse_da
 from accounts import current_member
 
 
-SOURCES = ('direct', 'ardennes-etape', 'villaforyou', 'belvilla', 'telephone', 'autre')
+SOURCES = ('direct', 'ardennes-etape', 'villaforyou', 'belvilla', 'booking', 'airbnb', 'telephone', 'autre')
 FLAGS = ('access_sent', 'cleaning_done', 'reception_ready')
 EXTERNAL_FLAGS = ('reception_ready', 'cleaning_done')
 PAYMENT_METHODS = {'transfer':'Virement bancaire','card':'Carte','cash':'Espèces','other':'Autre'}
@@ -38,6 +38,21 @@ def arrival_access_text(arrival, departure, arrival_time, departure_time):
         "Adresse : Rue Bierleux 69A, 4990 Lierneux, Belgique.")
 
 
+def cleaning_signature(departure, departure_time, cleaning_note):
+    """Ce que l'équipe ménage doit connaître : si cela change, la demande est à retransmettre."""
+    return hashlib.sha256(f"{departure}|{departure_time}|{cleaning_note}".encode()).hexdigest()[:16]
+
+
+def cleaning_state(notifications, departure, signature, status, cancellation_sent=False):
+    """notifications : détails des événements cleaning_team_notified du dossier."""
+    requested = any(item.get('signature') == signature if item.get('signature') else item.get('departure') == departure
+                    for item in notifications)
+    notified = bool(notifications)
+    return {'requested': requested,
+            'changed': notified and not requested and status == 'confirmed',
+            'cancel_pending': notified and status == 'cancelled' and not cancellation_sent and departure >= date.today().isoformat()}
+
+
 def record_event(connection, booking_id, event_type, actor='system', details=None):
     details = dict(details or {})
     member = current_member.get()
@@ -62,8 +77,11 @@ def initialize_operations(connection):
         connection.execute("ALTER TABLE booking_workflows ADD COLUMN arrival_time TEXT NOT NULL DEFAULT '17:00'")
     if 'departure_time' not in workflow_columns:
         connection.execute("ALTER TABLE booking_workflows ADD COLUMN departure_time TEXT NOT NULL DEFAULT '09:00'")
-    connection.execute('''CREATE UNIQUE INDEX IF NOT EXISTS workflow_reference
-        ON booking_workflows(source,reference) WHERE reference IS NOT NULL''')
+    if 'platform_cents' not in workflow_columns:
+        connection.execute('ALTER TABLE booking_workflows ADD COLUMN platform_cents INTEGER')
+    # L'unicité des références ne vaut que pour les dossiers actifs : elle est contrôlée dans add_inquiry.
+    connection.execute('DROP INDEX IF EXISTS workflow_reference')
+    connection.execute('CREATE INDEX IF NOT EXISTS workflow_reference_lookup ON booking_workflows(source,reference)')
     connection.execute('''CREATE TABLE IF NOT EXISTS booking_timeline (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         booking_id INTEGER NOT NULL REFERENCES demandes(id),
@@ -113,6 +131,34 @@ def euros(cents):
     return f"{cents/100:.2f}".replace('.', ',')
 
 
+MONTHS = {'janvier':1,'janv':1,'jan':1,'january':1,'février':2,'fevrier':2,'févr':2,'fevr':2,'fév':2,'fev':2,'feb':2,'february':2,
+          'mars':3,'mar':3,'march':3,'avril':4,'avr':4,'apr':4,'april':4,'mai':5,'may':5,'juin':6,'jun':6,'june':6,
+          'juillet':7,'juil':7,'jul':7,'july':7,'août':8,'aout':8,'aug':8,'august':8,'septembre':9,'sept':9,'sep':9,'september':9,
+          'octobre':10,'oct':10,'october':10,'novembre':11,'nov':11,'november':11,'décembre':12,'decembre':12,'déc':12,'dec':12,'december':12}
+
+
+def read_date(value):
+    """Reconnaît 2026-12-11, 11/12/2026, 11.12.2026, « vendredi 11 décembre 2026 » ou « Dec 11, 2026 ». Vide si incertain."""
+    value = value.strip().casefold()
+    candidates = []
+    if match := re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', value):
+        candidates.append((match[1], match[2], match[3]))
+    elif match := re.search(r'(\d{1,2})[/.](\d{1,2})[/.](\d{4})', value):
+        candidates.append((match[3], match[2], match[1]))
+    elif match := re.search(r'(\d{1,2})(?:er)?\s+([a-zéû]+)\.?\s+(\d{4})', value):
+        if match[2] in MONTHS:
+            candidates.append((match[3], MONTHS[match[2]], match[1]))
+    elif match := re.search(r'([a-zéû]+)\.?\s+(\d{1,2}),?\s+(\d{4})', value):
+        if match[1] in MONTHS:
+            candidates.append((match[3], MONTHS[match[1]], match[2]))
+    for year, month, day in candidates:
+        try:
+            return date(int(year), int(month), int(day)).isoformat()
+        except ValueError:
+            return ''
+    return ''
+
+
 def preview_email(text):
     if not isinstance(text, str) or not 1 <= len(text.strip()) <= 12000:
         raise BookingError('Collez un message de 12 000 caractères maximum.')
@@ -121,7 +167,8 @@ def preview_email(text):
               'arrival': '', 'departure': '', 'guests': '', 'message': text}
     lowered = text.casefold()
     for source, pattern in [('ardennes-etape', r'ardennes[ -]?[ée]tape'),
-                            ('villaforyou', r'villa\s*for\s*you'), ('belvilla', r'belvilla')]:
+                            ('villaforyou', r'villa\s*for\s*you'), ('belvilla', r'belvilla'),
+                            ('booking', r'booking\.com'), ('airbnb', r'airbnb')]:
         if re.search(pattern, lowered):
             fields['source'] = source
             break
@@ -130,8 +177,8 @@ def preview_email(text):
         'email': r'(?:e-?mail(?: du (?:client|voyageur))?|guest email)\s*[:：]\s*([^\s<>]+@[^\s<>]+)',
         'reference': r'(?:r[ée]f[ée]rence(?: de r[ée]servation)?|reservation id|booking (?:id|reference))\s*[:：#]\s*([^\n]+)',
         'guests': r'(?:voyageurs|personnes|guests|nombre de personnes)\s*[:：]\s*(\d+)',
-        'arrival': r'(?:arriv[ée]e|check[ -]?in|arrival)\s*[:：]\s*(\d{4}-\d{2}-\d{2}|\d{2}[/.]\d{2}[/.]\d{4})',
-        'departure': r'(?:d[ée]part|check[ -]?out|departure)\s*[:：]\s*(\d{4}-\d{2}-\d{2}|\d{2}[/.]\d{2}[/.]\d{4})',
+        'arrival': r'(?:arriv[ée]e|check[ -]?in|arrival)\s*[:：]\s*([^\n]+)',
+        'departure': r'(?:d[ée]part|check[ -]?out|departure)\s*[:：]\s*([^\n]+)',
     }
     warnings = ['Extraction indicative : vérifiez chaque champ avec le message d’origine. Rien n’est enregistré avant la validation du formulaire.']
     for key, pattern in patterns.items():
@@ -139,13 +186,7 @@ def preview_email(text):
         if match:
             value = match[1].strip()
             if key in ('arrival', 'departure'):
-                if '/' in value or '.' in value:
-                    day, month, year = re.split(r'[/.]', value)
-                    value = f'{year}-{month}-{day}'
-                try:
-                    parse_date(value)
-                except BookingError:
-                    value = ''
+                value = read_date(value)
             fields[key] = value
     for key, label in [('arrival', 'Arrivée'), ('departure', 'Départ'), ('guests', 'Nombre de voyageurs')]:
         if not fields[key]:
@@ -161,7 +202,10 @@ class Operations:
         source = data.get('source')
         if source not in SOURCES or source == 'direct':
             raise BookingError('Choisissez une origine externe ou téléphone.')
-        start, end = dates(data.get('arrival'), data.get('departure'))
+        # Un séjour déjà commencé (oubli de saisie) reste enregistrable, pas un séjour terminé.
+        start, end = dates(data.get('arrival'), data.get('departure'), future=False)
+        if end <= date.today():
+            raise BookingError('Ce séjour est déjà terminé : il n’y a plus rien à organiser.')
         name, email = str(data.get('name') or '').strip(), str(data.get('email') or '').strip()
         if len(name) > 100 or len(email) > 254 or (email and not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email)):
             raise BookingError('Nom ou e-mail invalide. Laissez vide une information inconnue.')
@@ -172,22 +216,41 @@ class Operations:
         message = str(data.get('message') or '').strip()
         if len(message) > 12000:
             raise BookingError('Message trop long.')
+        amount = str(data.get('amount') or '').strip().replace(',', '.')
+        platform_cents = cents(amount) if amount else None
         fingerprint = hashlib.sha256((source+'\n'+start.isoformat()+'\n'+end.isoformat()+'\n'+message).encode()).hexdigest() if message and not reference else None
         try:
             with self.store.connection(True) as connection:
+                active = '''SELECT demandes.id FROM demandes JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
+                    WHERE demandes.status IN ('pending','confirmed') AND demandes.id != ? AND workflow.source=? '''
+                if reference:
+                    twin = connection.execute(active+'AND workflow.reference=?', (identifier or 0, source, reference)).fetchone()
+                    if twin:
+                        raise BookingError(f'Cette référence est déjà enregistrée dans le dossier n° {twin["id"]}.', 409)
+                twin = connection.execute(active+'AND demandes.arrival=? AND demandes.departure=?',
+                                          (identifier or 0, source, start.isoformat(), end.isoformat())).fetchone()
+                if twin:
+                    raise BookingError(f'Un dossier {source} existe déjà pour ces dates (n° {twin["id"]}). Ouvrez-le plutôt que d’en créer un second.', 409)
                 if identifier:
-                    existing = connection.execute('SELECT demandes.status,demandes.arrival,demandes.departure,workflow.source,workflow.checklist,workflow.version FROM demandes JOIN booking_workflows workflow ON workflow.booking_id=demandes.id WHERE demandes.id=?', (identifier,)).fetchone()
-                    if not existing or existing['status'] != 'pending' or existing['source'] == 'direct':
-                        raise BookingError('Seul un dossier externe en attente peut être modifié.', 409)
+                    existing = connection.execute('''SELECT demandes.status,demandes.arrival,demandes.departure,workflow.source,workflow.checklist,workflow.version
+                        FROM demandes JOIN booking_workflows workflow ON workflow.booking_id=demandes.id WHERE demandes.id=?''', (identifier,)).fetchone()
+                    if not existing or existing['status'] not in ('pending', 'confirmed') or existing['source'] == 'direct':
+                        raise BookingError('Seul un dossier de plateforme en cours peut être modifié.', 409)
                     if existing['version'] != integer(data.get('version'), 0, 100000000, 'Version'):
                         raise BookingError('Ce dossier a été modifié ailleurs. Actualisez avant de réessayer.', 409)
+                    moved = (existing['arrival'], existing['departure']) != (start.isoformat(), end.isoformat())
+                    if moved and existing['status'] == 'confirmed' and self.store.unavailable(connection, start.isoformat(), end.isoformat(), identifier):
+                        raise BookingError('Les nouvelles dates chevauchent une autre réservation ou un blocage : modification impossible.', 409)
                     connection.execute('UPDATE demandes SET name=?,email=?,arrival=?,departure=?,guests=?,message=?,quote_json=NULL,total_cents=NULL WHERE id=?',
                                        (name,email,start.isoformat(),end.isoformat(),guests,message,identifier))
                     flags = json.loads(existing['checklist'])
-                    flags['reception_ready'] = False
-                    flags['cleaning_done'] = False
-                    connection.execute('UPDATE booking_workflows SET source=?,reference=?,fingerprint=?,checklist=?,version=version+1 WHERE booking_id=?',
-                                       (source,reference,fingerprint,json.dumps(flags),identifier))
+                    if moved:
+                        # Nouvelles dates : l'accueil et le ménage sont à refaire, la demande au ménage à retransmettre.
+                        flags['reception_ready'] = False
+                        flags['cleaning_done'] = False
+                    connection.execute('''UPDATE booking_workflows SET source=?,reference=?,fingerprint=?,checklist=?,platform_cents=?,
+                        cleaning_received_at=CASE WHEN ? THEN NULL ELSE cleaning_received_at END,version=version+1 WHERE booking_id=?''',
+                                       (source,reference,fingerprint,json.dumps(flags),platform_cents,moved,identifier))
                     record_event(connection,identifier,'external_reservation_updated','owner',{
                         'old_arrival':existing['arrival'],'old_departure':existing['departure'],
                         'arrival':start.isoformat(),'departure':end.isoformat(),'source':source,'reference':reference})
@@ -197,14 +260,15 @@ class Operations:
                     VALUES(datetime('now'),?,?,?,?,?,?,?,'pending',NULL,NULL)''',
                     (name, email, start.isoformat(), end.isoformat(), guests, 'Réservation externe à vérifier', message))
                     identifier = cursor.lastrowid
-                    connection.execute('INSERT INTO booking_workflows(booking_id,source,reference,fingerprint) VALUES(?,?,?,?)',
-                                       (identifier, source, reference, fingerprint))
+                    connection.execute('INSERT INTO booking_workflows(booking_id,source,reference,fingerprint,platform_cents) VALUES(?,?,?,?,?)',
+                                       (identifier, source, reference, fingerprint, platform_cents))
                     record_event(connection,identifier,'external_reservation_received','owner',{
                         'arrival':start.isoformat(),'departure':end.isoformat(),'source':source,'reference':reference})
-                conflict = self.store.unavailable(connection, start.isoformat(), end.isoformat())
-                return {'id': identifier, 'status': 'pending', 'conflict': conflict}
+                conflict = self.store.unavailable(connection, start.isoformat(), end.isoformat(), identifier)
+                status = connection.execute('SELECT status FROM demandes WHERE id=?', (identifier,)).fetchone()['status']
+                return {'id': identifier, 'status': status, 'conflict': conflict}
         except sqlite3.IntegrityError:
-            raise BookingError('Cette référence ou ce message a déjà été enregistré. Consultez le dossier existant.', 409)
+            raise BookingError('Ce message a déjà été enregistré. Consultez le dossier existant.', 409)
 
     def update_workflow(self, identifier, data):
         flags = data.get('checklist', {})
@@ -266,7 +330,7 @@ class Operations:
                 COALESCE(workflow.cleaning_received_at,'') AS cleaning_received_at,
                 COALESCE(workflow.arrival_time,'17:00') AS arrival_time,COALESCE(workflow.departure_time,'09:00') AS departure_time,
                 COALESCE(workflow.checklist,'{}') AS checklist,
-                COALESCE(workflow.version,0) AS version
+                COALESCE(workflow.version,0) AS version, workflow.platform_cents
                 FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
                 ORDER BY arrival,id''')]
             events_by_booking={row['id']:[] for row in rows}
@@ -291,6 +355,13 @@ class Operations:
                 if row['external']:
                     row['total_cents'] = None
                     row['has_quote'] = False
+                notified=[event['details'] for event in row['timeline'] if event['event_type']=='cleaning_team_notified']
+                cancel_sent=any(event['event_type']=='cleaning_cancellation_notified' for event in row['timeline'])
+                state=cleaning_state(notified,row['departure'],cleaning_signature(row['departure'],row['departure_time'],row['cleaning_note']),row['status'],cancel_sent)
+                row['cleaning_requested']=state['requested']
+                row['cleaning_changed']=state['changed']
+                row['cleaning_cancel_pending']=state['cancel_pending']
+                row['cleaning_received']=bool(row['cleaning_received_at']) and state['requested']
                 row['paid_cents']=sum(payment['amount_cents'] for payment in row['payments'])
                 row['payment_plan']=payment_plan(row['total_cents'],row['arrival'],settings) if row['total_cents'] else None
                 row['balance_cents']=max(0,row['total_cents']-row['paid_cents']) if row['total_cents'] is not None else None
@@ -310,12 +381,6 @@ class Operations:
                 row['conflict'] = self.store.unavailable(connection, row['arrival'], row['departure'], row['id']) if row['status'] in ('pending', 'confirmed') else False
                 row.pop('quote_json')
         confirmed = [row for row in rows if row['status'] == 'confirmed']
-        cleaning_notifications = {}
-        if confirmed:
-            with self.store.connection() as connection:
-                for event in connection.execute("SELECT booking_id,details FROM booking_timeline WHERE event_type='cleaning_team_notified' ORDER BY id"):
-                    detail = json.loads(event['details'])
-                    cleaning_notifications.setdefault(event['booking_id'], set()).add(detail.get('departure'))
         cleaning = []
         for row in confirmed:
             incoming = next((other for other in confirmed if other['arrival'] >= row['departure']), None)
@@ -323,8 +388,8 @@ class Operations:
                              'same_day_arrival': incoming['id'] if incoming and incoming['arrival']==row['departure'] else None,
                              'next_arrival': incoming['id'] if incoming else None,
                              'done': row['checklist'].get('cleaning_done', False),
-                             'requested': row['departure'] in cleaning_notifications.get(row['id'], set()),
-                             'received': bool(row.get('cleaning_received_at')),
+                             'requested': row['cleaning_requested'], 'changed': row['cleaning_changed'],
+                             'received': row['cleaning_received'],
                              'received_at': row.get('cleaning_received_at')})
         return {'today': today, 'settings': settings,
                 'pending': [row['id'] for row in rows if row['status'] == 'pending' and row['departure'] > today],
@@ -352,21 +417,22 @@ class Operations:
                 WHERE demandes.status='confirmed' AND demandes.arrival >= ? ORDER BY demandes.arrival,demandes.id''', (today,))]
             notifications = {}
             for event in connection.execute("SELECT booking_id,details FROM booking_timeline WHERE event_type='cleaning_team_notified' ORDER BY id"):
-                detail = json.loads(event['details'])
-                notifications.setdefault(event['booking_id'], set()).add(detail.get('departure'))
+                notifications.setdefault(event['booking_id'], []).append(json.loads(event['details']))
         tasks = []
         for row in bookings:
             checklist = json.loads(row.pop('checklist'))
             task_date = row['departure']
             done = bool(checklist.get('cleaning_done', False))
             incoming = next((candidate for candidate in arrivals if candidate['arrival'] >= task_date), None)
+            state = cleaning_state(notifications.get(row['id'], []), task_date,
+                                   cleaning_signature(task_date, row['departure_time'], row['cleaning_note']), 'confirmed')
             tasks.append({'booking_id': row['id'], 'date': task_date, 'guest_name': row['name'] or 'Voyageurs',
                 'guest_count': row['guests'], 'arrival': row['arrival'], 'departure': row['departure'],
                 'checkout_time': row['departure_time'], 'checkin_time': row['arrival_time'], 'cleaning_note': row['cleaning_note'],
                 'incoming_arrival': ({'booking_id': incoming['id'], 'guest_name': incoming['name'] or 'Voyageurs',
                     'guest_count': incoming['guests'], 'date': incoming['arrival'], 'checkin_time': incoming['arrival_time']} if incoming else None),
-                'requested': task_date in notifications.get(row['id'], set()),
-                'received': bool(row['cleaning_received_at']), 'received_at': row['cleaning_received_at'],
+                'requested': state['requested'], 'changed': state['changed'],
+                'received': bool(row['cleaning_received_at']) and state['requested'], 'received_at': row['cleaning_received_at'],
                 'done': done})
         return {'today': today, 'tasks': tasks}
 
@@ -374,15 +440,18 @@ class Operations:
         if action not in ('received', 'complete'):
             raise BookingError('Action de ménage inconnue.', 404)
         with self.store.connection(True) as connection:
-            row = connection.execute('''SELECT demandes.status,demandes.departure,workflow.checklist,workflow.cleaning_received_at
+            row = connection.execute('''SELECT demandes.status,demandes.departure,workflow.checklist,workflow.cleaning_received_at,
+                COALESCE(workflow.departure_time,'09:00') AS departure_time,COALESCE(workflow.cleaning_note,'') AS cleaning_note
                 FROM demandes LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id WHERE demandes.id=?''', (identifier,)).fetchone()
             if not row or row['status'] != 'confirmed':
                 raise BookingError('Rotation de ménage introuvable ou séjour non confirmé.', 404)
             connection.execute('INSERT OR IGNORE INTO booking_workflows(booking_id) VALUES(?)', (identifier,))
+            notified = [json.loads(event['details']) for event in connection.execute(
+                "SELECT details FROM booking_timeline WHERE booking_id=? AND event_type='cleaning_team_notified'", (identifier,))]
+            state = cleaning_state(notified, row['departure'], cleaning_signature(row['departure'], row['departure_time'], row['cleaning_note']), 'confirmed')
+            if not state['requested']:
+                raise BookingError('Le propriétaire n’a pas encore transmis cette demande, ou l’a modifiée depuis : attendez la nouvelle transmission.', 409)
             if action == 'received':
-                if not any(json.loads(event['details']).get('departure') == row['departure'] for event in connection.execute(
-                    "SELECT details FROM booking_timeline WHERE booking_id=? AND event_type='cleaning_team_notified'", (identifier,))):
-                    raise BookingError('Le propriétaire n’a pas encore transmis cette demande de ménage.', 409)
                 if not row['cleaning_received_at']:
                     timestamp = event_time()
                     connection.execute('UPDATE booking_workflows SET cleaning_received_at=?,version=version+1 WHERE booking_id=?', (timestamp, identifier))
@@ -517,7 +586,7 @@ class Operations:
                 LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id WHERE demandes.id=?''', (identifier,)).fetchone()
             if not row:
                 raise BookingError('Dossier introuvable.', 404)
-            if row['source'] != 'direct':
+            if row['source'] != 'direct' and kind != 'arrival':
                 raise BookingError('Les devis et messages commerciaux des plateformes se gèrent directement sur celles-ci.')
             quote = json.loads(row['quote_json']) if row['quote_json'] else None
             schedule = f"du {row['arrival']} à {hour_text(row['arrival_time'])} au {row['departure']} à {hour_text(row['departure_time'])}"
@@ -587,11 +656,11 @@ class Operations:
                     body+='Les dates restent en attente de confirmation du propriétaire.'
                     subject='Confirmation de réception de votre paiement — Le Noyer'
             elif kind == 'arrival':
-                if row['status'] != 'confirmed' or not quote or quote.get('package') not in PACKAGES:
-                    raise BookingError('Les informations d’arrivée sont réservées aux séjours confirmés au forfait.')
+                if row['status'] != 'confirmed' or (row['source'] == 'direct' and (not quote or quote.get('package') not in PACKAGES)):
+                    raise BookingError('Les informations d’arrivée sont réservées aux séjours confirmés.')
                 body = arrival_access_text(row['arrival'],row['departure'],row['arrival_time'],row['departure_time'])
                 subject = 'Préparer votre arrivée au Noyer'
-                includes_confirmation=True
+                includes_confirmation=row['source']=='direct'
                 includes_arrival=True
             elif kind == 'rejection':
                 if row['status']!='rejected':
@@ -633,7 +702,7 @@ class Operations:
                 ON workflow.booking_id=demandes.id WHERE demandes.id=?''',(identifier,)).fetchone()
             if not booking:
                 raise BookingError('Dossier introuvable.',404)
-            if booking['source']!='direct':
+            if booking['source']!='direct' and kind!='arrival':
                 raise BookingError('Les communications des plateformes se gèrent directement sur celles-ci.')
             prepared=None
             for event in connection.execute("SELECT details FROM booking_timeline WHERE booking_id=? AND event_type='message_prepared' ORDER BY id DESC",(identifier,)):
@@ -654,18 +723,34 @@ class Operations:
                     {'kind':kind,'payment_id':payment_id,'recipient':prepared.get('recipient') or booking['email'],'channel':'copy'})
         return {'sent':True,'channel':'copy','recipient':prepared.get('recipient') or booking['email']}
 
-    def mark_cleaning_team_notified(self, identifier, channel):
+    def mark_cleaning_team_notified(self, identifier, channel, kind='rotation'):
         if channel not in ('whatsapp','share','copy'):
             raise BookingError('Choisissez un canal de partage valide.')
+        if kind not in ('rotation','cancellation'):
+            raise BookingError('Type de transmission inconnu.')
         with self.store.connection(True) as connection:
             row=connection.execute('''SELECT demandes.status,demandes.departure,
-                COALESCE(workflow.source,'direct') AS source FROM demandes
+                COALESCE(workflow.source,'direct') AS source,COALESCE(workflow.departure_time,'09:00') AS departure_time,
+                COALESCE(workflow.cleaning_note,'') AS cleaning_note FROM demandes
                 LEFT JOIN booking_workflows workflow ON workflow.booking_id=demandes.id
                 WHERE demandes.id=?''',(identifier,)).fetchone()
             if not row:
                 raise BookingError('Dossier introuvable.',404)
+            notified=[json.loads(event['details']) for event in connection.execute(
+                "SELECT details FROM booking_timeline WHERE booking_id=? AND event_type='cleaning_team_notified'",(identifier,))]
+            if kind=='cancellation':
+                if row['status']!='cancelled' or not notified:
+                    raise BookingError('Seule l’annulation d’un séjour déjà transmis au ménage se signale à l’équipe.',409)
+                record_event(connection,identifier,'cleaning_cancellation_notified','owner',
+                    {'channel':channel,'departure':row['departure'],'source':row['source']})
+                return {'sent':True,'channel':channel}
             if row['status']!='confirmed':
                 raise BookingError('Seul un séjour confirmé peut être transmis à l’équipe de nettoyage.',409)
+            signature=cleaning_signature(row['departure'],row['departure_time'],row['cleaning_note'])
+            if not cleaning_state(notified,row['departure'],signature,'confirmed')['requested']:
+                # Nouvelle version des consignes : l'équipe doit en reconfirmer la réception.
+                connection.execute('INSERT OR IGNORE INTO booking_workflows(booking_id) VALUES(?)',(identifier,))
+                connection.execute('UPDATE booking_workflows SET cleaning_received_at=NULL,version=version+1 WHERE booking_id=?',(identifier,))
             record_event(connection,identifier,'cleaning_team_notified','owner',
-                {'channel':channel,'departure':row['departure'],'source':row['source']})
+                {'channel':channel,'departure':row['departure'],'source':row['source'],'signature':signature,'update':bool(notified)})
         return {'sent':True,'channel':channel}

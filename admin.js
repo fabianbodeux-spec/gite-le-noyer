@@ -82,9 +82,9 @@
     const [state,workspace]=await Promise.all([api('state?year='+year.value),api('workspace?year='+year.value)]);
     if(current!==generation || (!token && !window.NoyerAccount))return;
     element('management').hidden=false;element('login').hidden=true;element('auth-shell').hidden=true;
-    announce('Données actualisées. Le prévisionnel concerne les demandes directes du site, pas les réservations externes.');
+    announce('Données actualisées. Le prévisionnel compte les réservations du site et les montants indiqués pour les plateformes.');
     element('metrics').replaceChildren();
-    [[money(state.forecast_cents),'Prévisionnel des réservations directes'],[state.confirmed_nights,'Nuits occupées'],[state.unpriced_nights,'Dates tarifaires à compléter']].forEach(([value,label])=>{const box=document.createElement('div');text(box,'strong',value);text(box,'span',label);element('metrics').append(box)});
+    [[money(state.forecast_cents),'Prévisionnel des réservations confirmées'],[state.confirmed_nights,'Nuits occupées ou bloquées'],[state.unpriced_nights,'Dates tarifaires à compléter']].forEach(([value,label])=>{const box=document.createElement('div');text(box,'strong',value);text(box,'span',label);element('metrics').append(box)});
     element('admin-calendar').replaceChildren();
     for(let month=0;month<12;month++) {
       const section=document.createElement('section');section.className='calendar-month';

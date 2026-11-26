@@ -1,6 +1,6 @@
 (() => {
   const element = id => document.getElementById(id);
-  const sources = {direct:'Site Le Noyer','ardennes-etape':'Ardennes-étape',villaforyou:'Villa for You',belvilla:'Belvilla',telephone:'Téléphone',autre:'Autre'};
+  const sources = {direct:'Site Le Noyer','ardennes-etape':'Ardennes-étape',villaforyou:'Villa for You',belvilla:'Belvilla',booking:'Booking.com',airbnb:'Airbnb',telephone:'Téléphone',autre:'Autre'};
   const statuses = {pending:'En attente',confirmed:'Confirmée',cancelled:'Annulée',rejected:'Refusée'};
   const directFlags = {access_sent:'Informations d’accès transmises',reception_ready:'Accueil préparé',cleaning_done:'Ménage effectué'};
   const externalFlags = {reception_ready:'Accueil préparé',cleaning_done:'Ménage effectué'};
@@ -99,26 +99,36 @@
             add(confirmationAndArrivalSent?'Confirmation et informations d’arrivée envoyées':'Confirmation et informations d’arrivée à envoyer',confirmationAndArrivalSent,
               ()=>prepare(row,'arrival'),confirmationAndArrivalSent?'Un seul courriel confirmé':'Préparez le message de confirmation et d’arrivée');
           }
-          [['reception_ready','Accueil à préparer','Accueil préparé','Cliquez quand la maison est prête'],['cleaning_done','Ménage à valider','Ménage validé','Cliquez une fois le ménage terminé']].forEach(([key,label,doneLabel,hint])=>{
-            const complete=Boolean(row.checklist?.[key]);
-            add(complete?doneLabel:label,complete,()=>setFlag(row,key),complete?'':hint);
-          });
+          addOperations(row,add);
         }
       }
     } else {
-      if(row.status==='pending')add('Dates à valider',false,handlers.confirm||(()=>{if(!focusWorkspace('#record-conflict'))editInquiry(row)}),row.conflict?'Ces dates chevauchent une autre réservation':'Vérifiez puis bloquez les dates');
+      if(row.status==='pending')add('Dates à valider',false,handlers.confirm||(()=>{if(!focusWorkspace('#record-conflict'))editInquiry(row)}),row.conflict?'Ces dates chevauchent une autre réservation':'Les dates sont déjà bloquées : vérifiez puis validez');
       if(row.status==='confirmed'){
-        [['reception_ready','Accueil à préparer','Accueil préparé','Cliquez quand la maison est prête'],['cleaning_done','Ménage à valider','Ménage validé','Cliquez une fois le ménage terminé']].forEach(([key,label,doneLabel,hint])=>{
-          const complete=Boolean(row.checklist?.[key]);
-          add(complete?doneLabel:label,complete,()=>setFlag(row,key),complete?'':hint);
-        });
+        const arrivalSent=sentMessage(row,'arrival');
+        add(arrivalSent?'Message d’arrivée envoyé':'Message d’arrivée à envoyer',arrivalSent,()=>prepare(row,'arrival'),
+          arrivalSent?'Envoi confirmé':'À copier dans la messagerie de la plateforme');
+        addOperations(row,add);
       }
     }
+    if(row.cleaning_cancel_pending)add('Annulation à signaler au ménage',false,()=>openCleaningShare(row,null,'cancellation'),'L’équipe avait reçu la demande de ménage de ce séjour');
     if(!list.children.length)text(panel,'p','Aucune étape à suivre pour ce dossier.','progress-empty');
     else panel.append(heading,list);
     if(pending[0]){pending[0].action.classList.add('is-next');pending[0].state.textContent='Maintenant'}
     parent.append(panel);
     return pending[0]||null;
+  }
+  // Étapes communes aux séjours confirmés : accueil, transmission au ménage, ménage.
+  function addOperations(row,add){
+    const ready=Boolean(row.checklist?.reception_ready),cleaned=Boolean(row.checklist?.cleaning_done);
+    add(ready?'Accueil préparé':'Accueil à préparer',ready,()=>setFlag(row,'reception_ready'),ready?'':'Cliquez quand la maison est prête');
+    const task=(current?.cleaning||[]).find(item=>item.booking_id===row.id);
+    if(!cleaned){
+      const sent=Boolean(row.cleaning_requested);
+      add(sent?'Consignes transmises au ménage':row.cleaning_changed?'Consignes modifiées : à retransmettre':'Consignes de ménage à transmettre',sent,
+        ()=>openCleaningShare(row,task),sent?(row.cleaning_received?'Réception confirmée par l’équipe':'En attente de la confirmation de l’équipe'):row.cleaning_changed?'Dates, horaire ou consignes changés depuis le dernier envoi':'Partagez la date et les consignes avec l’équipe');
+    }
+    add(cleaned?'Ménage validé':'Ménage à valider',cleaned,()=>setFlag(row,'cleaning_done'),cleaned?'':'Cliquez une fois le ménage terminé');
   }
   // Coche une étape (accueil, ménage) en un clic, sans formulaire à enregistrer.
   async function setFlag(row,key){
@@ -127,7 +137,7 @@
     const updated=current.records.find(record=>record.id===row.id);if(updated)showRecord(updated);
     notice(key==='cleaning_done'?'Ménage validé.':'Accueil préparé.');
   }
-  const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Demande transmise à l’équipe ménage',cleaning_request_received:'Demande de ménage reçue par l’équipe',cleaning_completed_by_team:'Ménage terminé — équipe',arrival_time_updated:'Heure d’arrivée actualisée',departure_time_updated:'Heure de départ actualisée'};
+  const eventLabels={history_tracking_started:'Suivi chronologique activé',request_received:'Demande reçue sur le site',reservation_confirmed:'Réservation confirmée',reservation_cancelled:'Réservation annulée',request_rejected:'Demande refusée',external_reservation_received:'Réservation externe enregistrée',external_reservation_updated:'Dossier externe modifié',external_dates_validated:'Dates validées',cleaning_cancellation_notified:'Annulation signalée à l’équipe ménage',payment_validated:'Paiement validé',quote_email_sent:'Devis envoyé par e-mail',quote_marked_sent_manually:'Devis envoyé après copie',followup_email_sent:'Relance envoyée par e-mail',followup_marked_sent_manually:'Relance envoyée après copie',payment_email_sent:'Confirmation de paiement envoyée',reservation_confirmation_email_sent:'Confirmation de réservation envoyée',arrival_information_email_sent:'Informations d’arrivée envoyées',reservation_confirmation_sent_manually:'Confirmation de réservation envoyée après copie',arrival_information_sent_manually:'Informations d’arrivée envoyées après copie',email_send_failed:'Échec de l’envoi du courriel',message_prepared:'Brouillon préparé',message_sent_manually:'Message envoyé après copie',checklist_step_updated:'Étape du séjour mise à jour',private_note_updated:'Note privée modifiée',cleaning_instructions_updated:'Consignes ménage modifiées',cleaning_team_notified:'Demande transmise à l’équipe ménage',cleaning_request_received:'Demande de ménage reçue par l’équipe',cleaning_completed_by_team:'Ménage terminé — équipe',arrival_time_updated:'Heure d’arrivée actualisée',departure_time_updated:'Heure de départ actualisée'};
   function appendTimeline(parent,row) {
     const section=document.createElement('section');section.className='event-timeline';text(section,'h3','Historique du dossier');
     const list=document.createElement('ol');
@@ -147,7 +157,7 @@
       else if(event.event_type==='quote_email_sent'||event.event_type==='quote_marked_sent_manually'||event.event_type==='followup_email_sent'||event.event_type==='followup_marked_sent_manually'||event.event_type==='payment_email_sent'||event.event_type==='reservation_confirmation_email_sent'||event.event_type==='arrival_information_email_sent'||event.event_type==='reservation_confirmation_sent_manually'||event.event_type==='arrival_information_sent_manually'||event.event_type==='message_sent_manually')description=detail.recipient||'';
       else if(event.event_type==='message_prepared'&&detail.kind==='followup')description=detail.subject||'';
       else if(event.event_type==='checklist_step_updated')description=(directFlags[detail.step]||externalFlags[detail.step]||detail.step)+': '+(detail.completed?'terminé':'à refaire');
-      else if(event.event_type==='cleaning_team_notified')description='Départ du '+(detail.departure?dateLabel(detail.departure):'séjour')+' · '+({whatsapp:'WhatsApp',share:'menu de partage',copy:'copie manuelle'}[detail.channel]||'canal non précisé')+'. Transmission déclarée par vous.';
+      else if(event.event_type==='cleaning_team_notified'||event.event_type==='cleaning_cancellation_notified')description=(detail.update?'Mise à jour. ':'')+'Départ du '+(detail.departure?dateLabel(detail.departure):'séjour')+' · '+({whatsapp:'WhatsApp',share:'menu de partage',copy:'copie manuelle'}[detail.channel]||'canal non précisé')+'. Transmission déclarée par vous.';
       else if(event.event_type==='cleaning_request_received'||event.event_type==='cleaning_completed_by_team')description='Départ concerné : '+(detail.departure?dateLabel(detail.departure):'date à vérifier')+'.';
       else if(event.event_type==='arrival_time_updated'||event.event_type==='departure_time_updated')description=(detail.from||'—')+' → '+(detail.to||'—')+'.';
       else if(detail.arrival)description=dateLabel(detail.arrival)+' → '+dateLabel(detail.departure)+(detail.source?' · '+(sources[detail.source]||detail.source):'');
@@ -197,25 +207,30 @@
   }
   function cleaningMessage(row,task) {
     const incoming=task.next_arrival?current.records.find(item=>item.id===task.next_arrival):null;
-    const lines=['LE NOYER — PASSAGE MÉNAGE','Date : '+dateInput(task.date),'Créneau de préparation : '+(row.departure_time||'09:00').replace(':',' h ')+' à 17 h',
+    const lines=[row.cleaning_changed?'LE NOYER — PASSAGE MÉNAGE (MISE À JOUR : remplace le message précédent)':'LE NOYER — PASSAGE MÉNAGE','Date : '+dateInput(task.date),'Créneau de préparation : '+(row.departure_time||'09:00').replace(':',' h ')+' à 17 h',
       'Séjour sortant : '+(row.name||sources[row.source]||'Voyageurs')+' · '+row.guests+' personnes'];
     lines.push(incoming?(incoming.arrival===task.date?'Nouvelle arrivée le même jour : ':'Prochaine arrivée le '+dateInput(incoming.arrival)+' : ')+(incoming.name||sources[incoming.source]||'Voyageurs')+' · '+incoming.guests+' personnes, à partir de '+(incoming.arrival_time||'17:00').replace(':',' h ')+'.':'Aucune prochaine arrivée enregistrée.');
     lines.push('Adresse : Rue Bierleux 69A, 4990 Lierneux.','Consignes : '+(row.cleaning_note||'Aucune consigne particulière.'),'Après réception, confirmez la demande et la fin du ménage dans l’espace équipe : '+window.location.origin+'/equipe-menage');
     return lines.join('\n');
   }
-  function openCleaningShare(row,task) {
+  function cancellationMessage(row) {
+    return ['LE NOYER — PASSAGE MÉNAGE ANNULÉ','Le séjour '+(row.name||sources[row.source]||'des voyageurs')+' du '+dateInput(row.arrival)+' au '+dateInput(row.departure)+' est annulé.',
+      'Le ménage prévu le '+dateInput(row.departure)+' n’a plus lieu. Merci de ne pas vous déplacer.','Le planning à jour : '+window.location.origin+'/equipe-menage'].join('\n');
+  }
+  function openCleaningShare(row,task,kind='rotation') {
     const dialog=element('cleaning-share-dialog'),preview=element('cleaning-share-text');
-    preview.value=cleaningMessage(row,task);dialog.dataset.bookingId=String(row.id);dialog.dataset.channel='';
+    if(kind==='rotation'&&!task)throw new Error('Aucune rotation de ménage trouvée pour ce séjour. Cliquez sur Actualiser.');
+    preview.value=kind==='cancellation'?cancellationMessage(row):cleaningMessage(row,task);dialog.dataset.bookingId=String(row.id);dialog.dataset.channel='';dialog.dataset.kind=kind;
     element('cleaning-share-status').textContent='Choisissez un moyen de partage. Après l’envoi dans votre application, revenez ici pour l’inscrire dans l’historique.';
     element('confirm-cleaning-share').disabled=true;
     if(!dialog.open)dialog.showModal();
   }
   async function confirmCleaningShare() {
-    const dialog=element('cleaning-share-dialog'),channel=dialog.dataset.channel,id=dialog.dataset.bookingId;
+    const dialog=element('cleaning-share-dialog'),channel=dialog.dataset.channel,id=dialog.dataset.bookingId,kind=dialog.dataset.kind||'rotation';
     if(!channel||!id)return;
-    await api('requests/'+id+'/cleaning-notified',{channel});dialog.close();await refresh();
-    const updated=current.records.find(record=>record.id===Number(id));if(updated)showRecord(updated);
-    notice('Transmission des consignes déclarée et inscrite dans l’historique.');
+    await api('requests/'+id+'/cleaning-notified',{channel,kind});dialog.close();await refresh();
+    const updated=current.records.find(record=>record.id===Number(id));if(updated&&element('record-dialog').open)showRecord(updated);
+    notice(kind==='cancellation'?'Annulation signalée à l’équipe et inscrite dans l’historique.':'Transmission des consignes déclarée et inscrite dans l’historique.');
   }
   function showPage(page,updateUrl=false) {
     const titles={dashboard:'Vue d’ensemble',dossiers:'Dossiers',members:'Membres',reservations:'Réservations externes','site-requests':'Demandes du site',cleaning:'Accueil & ménage',pricing:'Tarifs du site',availability:'Disponibilités'};
@@ -254,7 +269,7 @@
       ['Horaires','Arrivée '+hour(row.arrival_time||'17:00')+', départ '+hour(row.departure_time||'09:00')],
       ['Voyageurs',row.guests+' personnes']];
     if(direct)facts.push(['Montant',money(row.total_cents)],['E-mail',row.email||'À compléter']);
-    else facts.push(['Référence',row.reference||'Non renseignée'],['Contact',row.email||'Non renseigné']);
+    else facts.push(['Référence',row.reference||'Non renseignée'],['Montant plateforme',row.platform_cents?money(row.platform_cents):'Non renseigné'],['Contact',row.email||'Non renseigné']);
     facts.forEach(([label,value])=>{const item=document.createElement('div');item.className='record-fact';text(item,'dt',label);text(item,'dd',value);summary.append(item)});
     head.append(summary);content.append(head);
 
@@ -288,7 +303,7 @@
       if(state.due&&sameStep)text(nextCard,'p',(state.tone==='late'?'En retard : ':'Échéance : ')+dueText(state),'record-next-due'+(state.tone?' is-'+state.tone:''));
       else if(next)text(nextCard,'p','À faire dès maintenant.','record-next-due');
       if(next){
-        const verb=/Courriel|courriel|message|Confirmation|Devis|devis/.test(next.label)?'Préparer le message':/Solde|Acompte|Paiement/.test(next.label)?'Enregistrer le paiement':/Dates/.test(next.label)?'Valider les dates':'Marquer comme fait';
+        const verb=/onsignes|nnulation à signaler/.test(next.label)?'Partager avec l’équipe':/Courriel|courriel|[Mm]essage|Confirmation|Devis|devis/.test(next.label)?'Préparer le message':/Solde|Acompte|Paiement/.test(next.label)?'Enregistrer le paiement':/Dates/.test(next.label)?'Valider les dates':'Marquer comme fait';
         const go=button(nextCard,verb,next.activate,'btn');go.id=row.status==='pending'&&!direct?'record-confirm-dates':'record-next-action';
       }
     } else {
@@ -333,9 +348,10 @@
 
     // Autres actions : modifications et annulations, volontairement discrètes.
     const others=[];
-    if(!direct&&row.status==='pending')others.push(['Modifier les dates ou les informations',()=>editInquiry(row),'record-edit-dates']);
+    if(!direct&&['pending','confirmed'].includes(row.status))others.push(['Modifier les dates ou les informations',()=>editInquiry(row),'record-edit-dates']);
+    if(!direct&&row.status==='pending')others.push(['Retirer du calendrier',async()=>{if(!window.confirm('Confirmez que cette réservation a été annulée sur la plateforme avant de libérer les dates ici.'))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated)showRecord(updated)}]);
     if(row.status==='pending'&&direct)others.push(['Refuser la demande',async()=>{if(!window.confirm('Refuser cette demande du site ?'))return;await api('requests/'+row.id+'/status',{status:'rejected'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);await prepare(updated,'rejection')}}]);
-    if(row.status==='confirmed')others.push([direct?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=direct?'Annuler cette réservation et libérer les dates ?':'Confirmez que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(direct)await prepare(updated,'cancellation')}}]);
+    if(row.status==='confirmed')others.push([direct?'Annuler et libérer les dates':'Retirer du calendrier',async()=>{const message=direct?'Annuler cette réservation et libérer les dates ?':'Confirmez que la réservation a été annulée sur la plateforme avant de libérer les dates ici.';if(!window.confirm(message))return;await api('requests/'+row.id+'/status',{status:'cancelled'});await refresh();const updated=current.records.find(record=>record.id===row.id);if(updated){showRecord(updated);if(updated.cleaning_cancel_pending)openCleaningShare(updated,null,'cancellation');else if(direct)await prepare(updated,'cancellation')}}]);
     if(others.length){
       const more=document.createElement('details');more.className='record-more';text(more,'summary','Autres actions');
       const box=document.createElement('div');box.className='record-actions';
@@ -352,7 +368,7 @@
   }
   function workflowPayload(row) {return {version:row.version,notes:row.notes,cleaning_note:row.cleaning_note||'',arrival_time:row.arrival_time||'17:00',departure_time:row.departure_time||'09:00',checklist:{...row.checklist}}}
   function displayDraft(row,kind,draft,paymentId=null) {
-    element('draft-recipient').textContent=draft.recipient || 'Adresse du voyageur à compléter';
+    element('draft-recipient').textContent=draft.recipient || (row.source!=='direct'?'À copier dans la messagerie de '+(sources[row.source]||'la plateforme'):'Adresse du voyageur à compléter');
     element('draft-subject').value=draft.subject;element('draft-body').value=draft.body;
     element('draft-status').textContent='Courriel préparé. Copiez-le dans votre messagerie privée, envoyez-le, puis confirmez l’envoi pour l’inscrire dans l’historique.';
     const validateSent=element('mark-message-sent');validateSent.hidden=false;validateSent.disabled=true;validateSent.dataset.bookingId=String(row.id);validateSent.dataset.kind=kind;validateSent.dataset.paymentId=paymentId||'';
@@ -367,7 +383,8 @@
     element('record-dialog').close();showPage('reservations',true);
     const form=element('external-form');
     const data={id:row.id,version:row.version,source:row.source,reference:row.reference||'',name:row.name,email:row.email,
-      arrival:row.arrival,departure:row.departure,guests:row.guests,message:row.message};
+      arrival:row.arrival,departure:row.departure,guests:row.guests,message:row.message,
+      amount:row.platform_cents?(row.platform_cents/100).toFixed(2).replace('.',','):''};
     Object.entries(data).forEach(([key,value])=>{const input=form.elements.namedItem(key);if(input)input.value=value||''});
     element('new-inquiry').open=true;element('import-feedback').textContent='Modification du dossier n° '+row.id+'.';
     form.scrollIntoView({block:'start'});form.elements.namedItem('arrival').focus();
@@ -381,7 +398,7 @@
     card.append(leading);
     const stay=document.createElement('div');stay.className='record-stay';
     text(stay,'strong',dateLabel(row.arrival)+' → '+dateLabel(row.departure));
-    text(stay,'span',row.guests+' voyageurs'+(row.source==='direct'?' · '+money(row.total_cents):''));card.append(stay);
+    text(stay,'span',row.guests+' voyageurs'+(row.source==='direct'?' · '+money(row.total_cents):row.platform_cents?' · '+money(row.platform_cents):''));card.append(stay);
     const status=text(card,'span',statusLabel(row),'record-status status-'+row.status);
     if(row.conflict)text(card,'span','Chevauchement','record-status status-conflict');
     const actionArea=document.createElement('div');actionArea.className='record-card-action';
@@ -467,9 +484,9 @@
     if(!tasks.length){const empty=document.createElement('div');empty.className='empty-state';text(empty,'strong','Aucune réservation dans cette étape.');text(empty,'p','Choisissez une autre étape dans la liste de suivi.');parent.append(empty);return}
     tasks.forEach(task=>{const row=current.records.find(record=>record.id===task.booking_id);if(!row)return;
       const card=document.createElement('article');card.className='operation-row';
-      const date=document.createElement('div');date.className='operation-date';text(date,'strong',dateLabel(task.date));text(date,'span','9 h–17 h');card.append(date);
+      const date=document.createElement('div');date.className='operation-date';text(date,'strong',dateLabel(task.date));text(date,'span',(row.departure_time||'09:00').slice(0,5).replace(':',' h ').replace(' h 00',' h').replace(/^0/,'')+'–17 h');card.append(date);
       const info=document.createElement('div');text(info,'strong','Départ · '+(row.name||sources[row.source]));text(info,'span',task.same_day_arrival?'Nouvelle arrivée le même jour':'Maison à préparer pour le prochain séjour');card.append(info);
-      text(card,'span',task.done?'Ménage terminé':task.received?'Demande reçue':task.requested?'En attente de confirmation':'Demande à transmettre','record-status '+(task.done?'status-confirmed':'status-pending'));
+      text(card,'span',task.done?'Ménage terminé':task.received?'Demande reçue':task.requested?'En attente de confirmation':task.changed?'Modifiée : à retransmettre':'Demande à transmettre','record-status '+(task.done?'status-confirmed':'status-pending'));
       const actions=document.createElement('div');actions.className='operation-actions';
       button(actions,'Partager les consignes',()=>openCleaningShare(row,task),'btn btn-outline');
       button(actions,task.done?'Annuler la validation':'Marquer la maison prête',async()=>{const payload=workflowPayload(row);payload.checklist.cleaning_done=!task.done;await api('requests/'+row.id+'/workflow',payload);await refresh()},'btn btn-outline');
@@ -500,7 +517,9 @@
   const timelineHas=(row,types)=>(row.timeline||[]).some(event=>types.includes(event.event_type));
   function dossierState(row) {
     const today=current.today,rules=current.settings||{deposit_percent:30,balance_days:45,quote_hours:24,access_days:7};
+    if(row.cleaning_cancel_pending)return {stage:'before',progress:0,next:'Annulation à signaler au ménage',due:row.arrival,tone:row.arrival<=addDays(today,2)?'soon':''};
     if(!['pending','confirmed'].includes(row.status))return null;
+    const transmitted=Boolean(row.cleaning_requested)||cleanedEarly(row);
     const cleaned=Boolean(row.checklist?.cleaning_done),started=row.arrival<=today;
     if(row.departure<today&&(cleaned||row.status!=='confirmed'))return null;
     const created=String(row.created_at||today).slice(0,10);
@@ -509,17 +528,24 @@
     const set=(label,due,tone)=>{if(!next.label){next.label=label;next.due=due||null;next.tone=tone||null}};
     let stage;
     if(row.source!=='direct'){
-      steps.push(true,row.status==='confirmed',Boolean(row.checklist?.reception_ready),cleaned);
+      const arrivalSent=sentMessage(row,'arrival');
+      steps.push(true,row.status==='confirmed',arrivalSent,Boolean(row.checklist?.reception_ready),transmitted,cleaned);
       if(row.status==='pending'){stage='new';set('Valider les dates',replyDue)}
-      else if(!started){stage='before';if(!row.checklist?.reception_ready)set('Préparer l’accueil',addDays(row.arrival,-1));else set('Prêt pour l’arrivée')}
-      else{stage='stay';set('Valider le ménage',row.departure)}
+      else if(!started){
+        stage='before';
+        if(!arrivalSent)set('Envoyer le message d’arrivée',addDays(row.arrival,-(rules.access_days??7)));
+        else if(!row.checklist?.reception_ready)set('Préparer l’accueil',addDays(row.arrival,-1));
+        else if(!transmitted)set(row.cleaning_changed?'Retransmettre les consignes de ménage':'Transmettre les consignes de ménage',addDays(row.departure,-1));
+        else set('Prêt pour l’arrivée');
+      }
+      else{stage='stay';if(!transmitted)set(row.cleaning_changed?'Retransmettre les consignes de ménage':'Transmettre les consignes de ménage',addDays(row.departure,-1));set('Valider le ménage',row.departure)}
     } else {
       const quoteSent=(row.timeline||[]).some(event=>event.event_type==='message_sent_manually'&&event.details?.kind==='quote')||timelineHas(row,['quote_marked_sent_manually','quote_email_sent']);
       const plan=row.payment_plan,paid=Number(row.paid_cents||0),deposit=plan?plan.deposit_cents:0;
       const depositOk=row.status==='confirmed'||(plan&&paid>=deposit);
       const fullyPaid=row.has_quote&&Number(row.balance_cents||0)<=0&&paid>0;
       const infoSent=timelineHas(row,['arrival_information_sent_manually','arrival_information_email_sent']);
-      steps.push(true,quoteSent||paid>0,depositOk,fullyPaid,infoSent,Boolean(row.checklist?.reception_ready),cleaned);
+      steps.push(true,quoteSent||paid>0,depositOk,fullyPaid,infoSent,Boolean(row.checklist?.reception_ready),transmitted,cleaned);
       if(row.status==='pending'){
         if(!row.has_quote){stage='new';set('Établir un devis',replyDue)}
         else if(!quoteSent&&!paid){stage='new';set('Envoyer le devis',replyDue)}
@@ -532,13 +558,16 @@
         stage='before';
         if(!infoSent)set('Envoyer les informations d’arrivée',addDays(row.arrival,-(rules.access_days??7)));
         else if(!row.checklist?.reception_ready)set('Préparer l’accueil',addDays(row.arrival,-1));
+        else if(!transmitted)set(row.cleaning_changed?'Retransmettre les consignes de ménage':'Transmettre les consignes de ménage',addDays(row.departure,-1));
         else set('Prêt pour l’arrivée');
-      } else {stage='stay';set('Valider le ménage',row.departure)}
+      } else {stage='stay';if(!transmitted)set(row.cleaning_changed?'Retransmettre les consignes de ménage':'Transmettre les consignes de ménage',addDays(row.departure,-1));set('Valider le ménage',row.departure)}
     }
     const done=steps.filter(Boolean).length;
     const tone=next.due?(next.due<today?'late':next.due<=addDays(today,2)?'soon':''):'';
     return {stage,progress:Math.round(done/steps.length*100),next:next.label,due:next.due,tone};
   }
+  // Un ménage déjà validé n'a plus besoin de transmission.
+  function cleanedEarly(row){return Boolean(row.checklist?.cleaning_done)}
   const STAGES=[['new','Nouvelle demande','Réponse attendue'],['quote','Devis envoyé','En attente d’acompte'],['deposit','Acompte reçu','Dates bloquées, solde à venir'],['before','Avant l’arrivée','Informations, accueil'],['stay','Séjour et ménage','Jusqu’au ménage validé']];
   function dueText(item){
     if(!item.due)return '';
@@ -564,7 +593,7 @@
         const bar=document.createElement('span');bar.className='dossier-bar';const fill=document.createElement('i');fill.style.width=state.progress+'%';bar.append(fill);bar.setAttribute('aria-label',state.progress+' % du parcours');card.append(bar);
         const foot=document.createElement('span');foot.className='dossier-foot';
         text(foot,'span',state.next+(state.due?', '+dueText(state):''),'dossier-next'+(state.tone?' is-'+state.tone:''));
-        text(foot,'span',row.source==='direct'&&row.total_cents?money(row.total_cents):'Plateforme','dossier-amount');card.append(foot);
+        text(foot,'span',row.source==='direct'&&row.total_cents?money(row.total_cents):row.platform_cents?money(row.platform_cents):'Plateforme','dossier-amount');card.append(foot);
         card.addEventListener('click',()=>showRecord(row));
         col.append(card);
       });
@@ -699,7 +728,8 @@
       }catch(error){element('import-feedback').textContent=error.message}finally{trigger.disabled=false}});
       element('reset-external').addEventListener('click',()=>{element('external-form').reset();element('external-form').elements.namedItem('id').value='';element('import-feedback').textContent='Formulaire vidé.'});
       element('external-form').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,data=Object.fromEntries(new FormData(form)),trigger=form.querySelector('button[type=submit]');trigger.disabled=true;
-        try{const result=await api(data.id?'external/'+data.id:'external',data);element('year').value=data.arrival.slice(0,4);await refresh();form.reset();form.elements.namedItem('id').value='';element('new-inquiry').open=false;showPage('reservations',true);notice('Réservation n° '+result.id+' enregistrée pour validation.'+(result.conflict?' Les dates chevauchent déjà une période occupée.':''));openRecord(result.id)}catch(error){element('import-feedback').textContent=error.message}finally{trigger.disabled=false}});
+        try{const result=await api(data.id?'external/'+data.id:'external',data);element('year').value=data.arrival.slice(0,4);await refresh();form.reset();form.elements.namedItem('id').value='';element('new-inquiry').open=false;showPage('reservations',true);const updated=current.records.find(record=>record.id===result.id);
+          notice((data.id?'Dossier n° '+result.id+' modifié.'+(updated?.cleaning_changed?' Les consignes de ménage sont à retransmettre.':''):'Réservation n° '+result.id+' enregistrée : dates bloquées dans le calendrier.')+(result.conflict?' Attention : ces dates chevauchent une autre réservation ou un blocage.':''));openRecord(result.id)}catch(error){element('import-feedback').textContent=error.message}finally{trigger.disabled=false}});
       element('bulk-rates').addEventListener('submit',async event=>{event.preventDefault();const form=event.currentTarget,trigger=form.querySelector('button');trigger.disabled=true;element('bulk-status').textContent='Mise à jour…';try{const result=await api('rates/bulk',{ids:[...selectedRates],...Object.fromEntries(new FormData(form))});await refresh();element('bulk-status').textContent=result.updated+' périodes mises à jour.';notice(result.updated+' périodes mises à jour.')}catch(error){element('bulk-status').textContent=error.message}finally{trigger.disabled=false}});
       element('select-all-rates').addEventListener('click',()=>{selectedRates=new Set(currentRates.map(rate=>rate.id));renderRates()});
       element('draft-close').addEventListener('click',()=>element('message-draft').close());
