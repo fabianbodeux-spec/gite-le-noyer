@@ -164,3 +164,32 @@
     });
   });
 })();
+
+// Glisseur en verre de la barre latérale
+(()=>{
+  const nav=document.querySelector('.erp-nav');if(!nav)return;
+  const glider=document.createElement('span');glider.className='nav-glider';glider.setAttribute('aria-hidden','true');
+  nav.prepend(glider);nav.classList.add('has-glider');
+  let hovered=null,moveTimer=0;
+  const place=link=>{
+    if(!link||!link.offsetParent){glider.classList.remove('is-ready');return}
+    const x=link.offsetLeft,y=link.offsetTop,w=link.offsetWidth,h=link.offsetHeight;
+    const prev=glider.style.transform;
+    glider.style.width=w+'px';glider.style.height=h+'px';glider.style.transform=`translate(${x}px,${y}px)`;
+    if(prev&&prev!==glider.style.transform){glider.classList.add('is-moving');clearTimeout(moveTimer);moveTimer=setTimeout(()=>glider.classList.remove('is-moving'),700)}
+    glider.classList.add('is-ready');glider.classList.toggle('is-hover',!!hovered&&!hovered.hasAttribute('aria-current'));
+  };
+  const active=()=>nav.querySelector('a[aria-current=page]');
+  const update=()=>place(hovered||active());
+  nav.querySelectorAll('a').forEach(link=>{
+    link.addEventListener('pointerenter',()=>{hovered=link;update()});
+    link.addEventListener('focus',()=>{hovered=link;update()});
+    link.addEventListener('blur',()=>{hovered=null;update()});
+  });
+  nav.addEventListener('pointerleave',()=>{hovered=null;update()});
+  new MutationObserver(update).observe(nav,{subtree:true,attributes:true,attributeFilter:['aria-current']});
+  new ResizeObserver(update).observe(nav);
+  const shell=document.getElementById('management');
+  if(shell)new MutationObserver(()=>requestAnimationFrame(update)).observe(shell,{attributes:true,attributeFilter:['hidden']});
+  requestAnimationFrame(update);
+})();
